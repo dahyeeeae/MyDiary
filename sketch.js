@@ -1,110 +1,1824 @@
-let particles = [];
-let confettiList = [];
-let bubbles = [];
-let bgImage;
-let mode = 'particle'; // 'particle', 'confetti', 'bubble'
+/* ===== Canvas (responsive) ===== */
+let W = 0,
+  H = 0;
 
+/* ===== Page margin / spacing ===== */
+const PAGE = {
+  marginX: 90, // 화면 좌우 여백
+  gapCol: 90, // 좌/중앙/우 컬럼 간 가로 간격
+  gapStack: 20, // 같은 컬럼 내 위아래 간격
+};
+
+/* ===== UI layout ===== */
+const UI = {
+  frameMenu: null, // (우측 위)
+  stickerPanel: null, // (좌측 위)
+  webcamPanel: null, // (우측 아래)
+  guidelinePanel: null, // (웹캠 하단)
+  toolPanel: null, // (좌측 아래)
+  diaryFrameRect: null, // (중앙)
+};
+
+// 스티커 패널 5×3 고정 그리드
+const STICKER_GRID = {
+  cols: 3,
+  rows: 5,
+  cell: 100,
+  gap: 12,
+  padX: 40,
+  padY: 40,
+};
+
+// 이미지 버튼용 전역
+let penImg = null;
+let eraserImg = null;
+let cameraBg = null;
+
+// 전역 버튼 rect 저장용
+let penBtnRect = null;
+let eraserBtnRect = null;
+let sizeBtnRects = [];
+let colorBtnRects = [];
+let frameBtnRects = [];
+
+let myFont;
+
+/* ===== Frames & Stickers ===== */
+const frameDefs = [
+  {
+    key: "todolist",
+    label: "To Do List",
+    src: "assets/frames/frame_todolist2.png",
+  },
+  {
+    key: "universe",
+    label: "우주 소행성",
+    src: "assets/frames/frame_universe2.png",
+  },
+  {
+    key: "ribbon",
+    label: "크리스마스 리본",
+    src: "assets/frames/frame_ribbon2.png",
+  },
+  {
+    key: "diary",
+    label: "그림일기",
+    src: "assets/frames/frame_diary2.png",
+  },
+];
+const FRAME_MENU_GRID = { cols: 2, rows: 2, gap: 8 };
+const FRAME_BTN_HEIGHT_SCALE = 0.86;
+const FRAME_MENU_TITLE_LINE = 24;
+const DEFAULT_FRAME_KEY = "ribbon";
+
+const stickerDefs = [
+  {
+    key: "twinkleGreen",
+    label: "반짝(초록)",
+    src: "assets/stickers/sticker_twinkle_green.png",
+  },
+  { key: "tree", label: "트리", src: "assets/stickers/sticker_tree.png" },
+  {
+    key: "ornament",
+    label: "오너먼트",
+    src: "assets/stickers/sticker_ornament.png",
+  },
+  { key: "cookie", label: "쿠키", src: "assets/stickers/sticker_cookie.png" },
+  { key: "coffee", label: "커피", src: "assets/stickers/sticker_coffee.png" },
+  { key: "twinkle", label: "반짝", src: "assets/stickers/sticker_twinkle.png" },
+  { key: "sun", label: "해", src: "assets/stickers/sticker_sun.png" },
+  { key: "logo", label: "로고", src: "assets/stickers/sticker_logo.png" },
+  { key: "bell", label: "방울", src: "assets/stickers/sticker_bell.png" },
+  { key: "bird", label: "새", src: "assets/stickers/sticker_bird.png" },
+  { key: "pop", label: "팝", src: "assets/stickers/sticker_pop.png" },
+  { key: "spring", label: "띠용", src: "assets/stickers/sticker_spring.png" },
+  { key: "cloud", label: "구름", src: "assets/stickers/sticker_cloud.png" },
+  { key: "snow", label: "눈", src: "assets/stickers/sticker_snow.png" },
+  { key: "book", label: "책", src: "assets/stickers/sticker_book.png" },
+];
+
+let frames = {};
+let stickers = {};
+let currentFrameIdx = frameDefs.findIndex(
+  (frame) => frame.key === DEFAULT_FRAME_KEY
+);
+if (currentFrameIdx === -1) {
+  currentFrameIdx = 0;
+}
+let bgImg = null;
+
+const PARAGRAPH_GAP = 10;
+
+const PANEL_BG_ALPHA = Math.round(255 * 0.8);
+const PANEL_BG_COLOR = [255, 254, 242, PANEL_BG_ALPHA];
+const PANEL_CORNER_RADIUS = 12;
+const PANEL_TITLE_COLOR = "#7A4100";
+const FRAME_MENU_TITLE = "> 속지를 골라보세요";
+const GUIDELINE_TITLE = "> 다이어리 활용법";
+const GUIDELINE_TEXT =
+  "1. 속지를 선택 후 스티커, 펜툴을 활용해 나만의 다이어리를 꾸며보세요\n 2. 버튼을 눌러 노트북에 내장된 카메라로 촬영 후 다이어리에서 꾸며보세요";
+const RIGHT_PANEL_TITLE_FONT_SIZE = 16;
+const RIGHT_PANEL_BODY_FONT_SIZE = 16;
+const RIGHT_PANEL_BUTTON_FONT_SIZE = 14;
+const GUIDELINE_TEXT_LEADING = 24;
+const GUIDELINE_TITLE_FONT_SIZE = RIGHT_PANEL_TITLE_FONT_SIZE;
+const GUIDELINE_BODY_LINE_HEIGHT = GUIDELINE_TEXT_LEADING;
+const GUIDELINE_PARAGRAPH_GAP = 10;
+const GUIDELINE_TITLE_LINE = FRAME_MENU_TITLE_LINE;
+
+/* ===== Drawing tool & layers ===== */
+let drawingBelow = null;
+let drawingAbove = null;
+let currentStrokeLayer = null;
+let drawTool = "pen";
+let penSize = 9;
+let eraserSize = 9;
+let brushColor = "#7A4100";
+const palette = ["#FF8A9B", "#7A4100", "#6BC743", "#79BADB"];
+
+/* ===== Webcam ===== */
+let cam,
+  webcamReady = false;
+
+/* ===== Draggables (stickers/photos) ===== */
+let draggables = [];
+let draggingIdx = -1;
+
+/* transform state */
+let activeMode = null;
+let startMouse = { x: 0, y: 0 };
+let startPos = { x: 0, y: 0 };
+let startScale = 1;
+let startAngle = 0;
+
+let blockDrawThisPress = false;
+let drawingThisStroke = false;
+let spawnDrag = null;
+
+/* ========================
+   Layout (좌/중/우 세 컬럼 세로 중앙 정렬)
+======================== */
+function updateLayout() {
+  W = windowWidth;
+  H = windowHeight;
+  const isNarrow = W < 1200;
+
+  const marginX = isNarrow ? 24 : PAGE.marginX;
+  const { gapCol, gapStack } = PAGE;
+
+  const stickerCell = isNarrow ? 80 : STICKER_GRID.cell;
+  const padXSticker = isNarrow ? 24 : STICKER_GRID.padX;
+  const gapSticker = isNarrow ? 8 : STICKER_GRID.gap;
+  const spWMin =
+    padXSticker * 2 +
+    STICKER_GRID.cols * stickerCell +
+    (STICKER_GRID.cols - 1) * gapSticker;
+
+  const leftColW = Math.max(
+    spWMin,
+    Math.min(isNarrow ? 320 : 380, Math.floor(W * 0.26))
+  );
+  const rightColW = leftColW;
+
+  /* ── 프레임 폭(가운데는 무조건 중앙 정렬) */
+  const MIN_FRAME_W = 720;
+  const TARGET_FRAME_W = 1100;
+  const MIN_FALLBACK_W = 320;
+
+  const availableAfterPanels =
+    W - (marginX * 2 + leftColW + rightColW + gapCol * 2);
+
+  const maxFrameW = Math.max(MIN_FALLBACK_W, availableAfterPanels);
+
+  const minBound = Math.min(MIN_FRAME_W, maxFrameW);
+  let centerW = Math.min(TARGET_FRAME_W, maxFrameW);
+  centerW = Math.max(centerW, minBound);
+
+  const centerX = (W - centerW) / 2;
+
+  const leftX = Math.max(marginX, centerX - gapCol - leftColW);
+  const rightX = Math.min(W - marginX - rightColW, centerX + centerW + gapCol);
+
+  /* ── 중앙 프레임 높이 */
+  const framePad = 16;
+  const contentMaxH = Math.max(620, H - 120);
+  const centerH = Math.min(contentMaxH, H - 80);
+
+  /* ── 스티커 패널 높이 */
+  const stickerH =
+    STICKER_GRID.padY * 2 +
+    STICKER_GRID.rows * STICKER_GRID.cell +
+    (STICKER_GRID.rows - 1) * STICKER_GRID.gap;
+
+  /* ── 우측 패널: 프레임 선택 */
+  const frameMenuH = 160;
+
+  /* ── 우측 웹캠: 비율 기반 + 클램프 */
+  const camAspect = getCameraAspect();
+  const desiredWebcamH = Math.round(rightColW / camAspect);
+  const webcamH = clamp(
+    desiredWebcamH,
+    250,
+    Math.min(580, Math.floor(H * 0.6))
+  );
+
+  /* ── 툴패널 */
+  const toolH = 240;
+  const webcamGap = gapStack + 12;
+
+  /* ──  가이드라인 패널 Hug 높이 계산 */
+  const guidePadX = 20;
+  const guidePadY = 20;
+  const titleLine = FRAME_MENU_TITLE_LINE; // 타이틀 라인 높이
+  const titleGapBelow = 16; // 타이틀 아래 여백
+  const paragraphGap = 8; // 단락 간 간격
+  const bodyLineHeight = GUIDELINE_TEXT_LEADING; // 본문 줄간 간격
+
+  // 본문 텍스트 총 높이
+  const guidelineTextH = measureGuidelineTextHeight(
+    GUIDELINE_TEXT,
+    rightColW,
+    guidePadX,
+    bodyLineHeight,
+    paragraphGap
+  );
+
+  // 패딩/타이틀/여백 포함한 최종 panel 높이(Hug)
+  const guidelineH =
+    guidePadY + titleLine + titleGapBelow + guidelineTextH + guidePadY;
+
+  /* ── 세 컬럼 총 높이 */
+  const leftColH = stickerH + gapStack + toolH;
+  const rightColH = frameMenuH + webcamGap + webcamH + gapStack + guidelineH;
+  const centerColH = centerH;
+
+  // 화면 세로 중앙 정렬
+  const contentH = Math.max(leftColH, rightColH, centerColH);
+  const contentTop = Math.max(20, (H - contentH) / 2);
+
+  const leftTop = contentTop + (contentH - leftColH) / 2;
+  const rightTop = contentTop + (contentH - rightColH) / 2;
+  const midTop = contentTop + (contentH - centerColH) / 2;
+
+  /* ── 좌측 */
+  UI.stickerPanel = {
+    x: leftX,
+    y: leftTop,
+    w: leftColW,
+    h: stickerH,
+    padX: STICKER_GRID.padX,
+    padY: STICKER_GRID.padY,
+    cell: STICKER_GRID.cell,
+    gap: STICKER_GRID.gap,
+    cols: STICKER_GRID.cols,
+    rows: STICKER_GRID.rows,
+  };
+  UI.toolPanel = {
+    x: leftX,
+    y: UI.stickerPanel.y + UI.stickerPanel.h + gapStack,
+    w: Math.max(leftColW, 380),
+    h: toolH,
+    padX: 18,
+    padY: 20,
+  };
+
+  /* ── 우측 */
+  UI.frameMenu = {
+    x: rightX,
+    y: rightTop,
+    w: rightColW,
+    h: frameMenuH,
+    padX: 20,
+    padY: 20,
+  };
+  UI.webcamPanel = {
+    x: rightX,
+    y: UI.frameMenu.y + UI.frameMenu.h + webcamGap,
+    w: rightColW,
+    h: webcamH,
+  };
+  UI.guidelinePanel = {
+    x: rightX,
+    y: UI.webcamPanel.y + UI.webcamPanel.h + gapStack,
+    w: rightColW,
+    h: guidelineH, // ← 내용에 따라 자동 결정된 높이
+    padX: guidePadX,
+    padY: guidePadY,
+  };
+
+  /* ── 중앙(프레임) */
+  UI.diaryFrameRect = {
+    x: centerX,
+    y: midTop,
+    w: centerW,
+    h: centerH,
+    pad: framePad,
+  };
+}
+
+/* ========================
+    Utils
+======================== */
+function drawPanel(
+  x,
+  y,
+  w,
+  h,
+  title = "",
+  bgColor = PANEL_BG_COLOR,
+  titleColor = "#111827",
+  titlePadX = 12,
+  titlePadY = 18,
+  titleFontSize = 14
+) {
+  push();
+  if (bgColor === null) {
+    noFill();
+    stroke(255);
+    strokeWeight(1.2);
+    rect(x, y, w, h, PANEL_CORNER_RADIUS);
+  } else {
+    noStroke();
+    if (Array.isArray(bgColor)) {
+      fill(...bgColor);
+    } else {
+      fill(bgColor);
+    }
+    rect(x, y, w, h, PANEL_CORNER_RADIUS);
+  }
+  fill(titleColor);
+  textSize(titleFontSize);
+  textStyle(BOLD);
+  textAlign(LEFT, TOP);
+  text(title, x + titlePadX, y + titlePadY);
+  pop();
+}
+function inRect(px, py, r) {
+  return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+function loadOrPlaceholder(src) {
+  return new Promise((res) =>
+    loadImage(
+      src,
+      (img) => res(img),
+      (_) => res(null)
+    )
+  );
+}
+function drawImageOrPlaceholder(img, x, y, w, h, label = "Image") {
+  if (img) {
+    image(img, x, y, w, h);
+    return;
+  }
+  push();
+  stroke(200);
+  fill(245);
+  rect(x, y, w, h, 10);
+  stroke(150);
+  line(x, y, x + w, y + h);
+  line(x + w, y, x, y + h);
+  noStroke();
+  fill(120);
+  textSize(12);
+  textAlign(CENTER, CENTER);
+  text(label, x + w / 2, y + h / 2);
+  pop();
+}
+function drawCoverImage(img, w, h) {
+  if (!img) {
+    background("#e5e7eb");
+    return;
+  }
+  const ir = img.width / img.height,
+    cr = w / h;
+  let dw, dh;
+  if (cr > ir) {
+    dw = w;
+    dh = w / ir;
+  } else {
+    dh = h;
+    dw = h * ir;
+  }
+  image(img, (width - dw) / 2, (height - dh) / 2, dw, dh);
+}
+function needsResizeCursorSwap(a) {
+  let d = ((a * 180) / Math.PI) % 180;
+  if (d < 0) d += 180;
+  return d >= 45 && d < 135;
+}
+function topmostItemAt(mx, my) {
+  for (let i = draggables.length - 1; i >= 0; i--) {
+    if (draggables[i].contains(mx, my)) return i;
+  }
+  return -1;
+}
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+function clampDraggableToFrame(item) {
+  if (!UI.diaryFrameRect) return;
+  const f = UI.diaryFrameRect;
+  const innerX = f.x + f.pad;
+  const innerY = f.y + f.pad;
+  const innerW =
+    drawingBelow && drawingBelow.width
+      ? drawingBelow.width
+      : Math.max(0, f.w - f.pad * 2);
+  const innerH =
+    drawingBelow && drawingBelow.height
+      ? drawingBelow.height
+      : Math.max(0, f.h - f.pad * 2);
+  if (innerW <= 0 || innerH <= 0) return;
+  const halfDiag = (Math.max(item.w, item.h) * item.scale) / 2;
+  const effHalfX = Math.min(halfDiag, innerW / 2);
+  const effHalfY = Math.min(halfDiag, innerH / 2);
+  const minCX = innerX + effHalfX;
+  const maxCX = innerX + innerW - effHalfX;
+  const minCY = innerY + effHalfY;
+  const maxCY = innerY + innerH - effHalfY;
+  const centerX = clamp(item.x + item.w / 2, minCX, maxCX);
+  const centerY = clamp(item.y + item.h / 2, minCY, maxCY);
+  item.x = centerX - item.w / 2;
+  item.y = centerY - item.h / 2;
+}
+function getCameraAspect() {
+  // camera.png 로딩 전에도 동작하도록 기본 16:9 가정
+  return cameraBg && cameraBg.width && cameraBg.height
+    ? cameraBg.width / cameraBg.height
+    : 16 / 9;
+}
+// 단락을 maxWidth에 맞춰 줄바꿈해서 라인 배열로 반환
+function wrapLinesByWidth(text, maxWidth) {
+  if (!text || maxWidth <= 0) return [""];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let line = "";
+
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (textWidth(test) <= maxWidth) {
+      line = test;
+    } else {
+      if (line) lines.push(line);
+      // 단어가 너무 길어 한 줄에도 못 들어가면 강제 끊기
+      if (textWidth(w) > maxWidth) {
+        let acc = "";
+        for (const ch of w) {
+          const t = acc + ch;
+          if (textWidth(t) <= maxWidth) acc = t;
+          else {
+            if (acc) lines.push(acc);
+            acc = ch;
+          }
+        }
+        line = acc;
+      } else {
+        line = w;
+      }
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+
+// 가이드라인 본문(개행으로 단락 구분)의 총 높이(px) 계산
+function measureGuidelineTextHeight(
+  textStr,
+  panelW,
+  padX,
+  lineHeight,
+  paragraphGap
+) {
+  textFont(myFont);
+  textSize(RIGHT_PANEL_TITLE_FONT_SIZE);
+
+  const maxWidth = panelW - padX * 2;
+  const paragraphs = textStr.split("\n");
+
+  let totalH = 0;
+  paragraphs.forEach((p, idx) => {
+    const lines = wrapLinesByWidth(p, maxWidth);
+    totalH += Math.max(1, lines.length) * lineHeight;
+    if (idx < paragraphs.length - 1) totalH += paragraphGap; // 단락 간 간격
+  });
+
+  return totalH;
+}
+
+function renderParagraphs(
+  textStr,
+  x,
+  y,
+  maxWidth,
+  maxHeight,
+  lineHeight,
+  paragraphGap
+) {
+  const paragraphs = textStr.split("\n"); // 개행만 단락 구분
+  let cy = y;
+
+  for (let p = 0; p < paragraphs.length; p++) {
+    const para = paragraphs[p];
+    const lines = wrapLinesByWidth(para, maxWidth);
+
+    for (const ln of lines) {
+      if (cy + lineHeight - y > maxHeight) return;
+      text(ln, x, cy);
+      cy += lineHeight;
+    }
+
+    if (p < paragraphs.length - 1) {
+      cy += paragraphGap;
+    }
+  }
+}
+
+/* ========================
+    Class: DraggableItem
+======================== */
+class DraggableItem {
+  constructor({ type, key = null, img = null, x, y, w, h }) {
+    this.type = type;
+    this.key = key;
+    this.img = img;
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.scale = 1;
+    this.angle = 0;
+    this.selected = false;
+    this.handleSize = 10;
+    this.rotHandleR = 7;
+    this.rotHandleGap = 18;
+    this.delSize = 14;
+  }
+  draw() {
+    const hovered =
+      this.contains(mouseX, mouseY) &&
+      !this.selected &&
+      draggingIdx < 0 &&
+      !activeMode;
+    const hoverScale = hovered ? 1.06 : 1.0;
+    push();
+    translate(this.x + this.w / 2, this.y + this.h / 2);
+    rotate(this.angle);
+    scale(this.scale * hoverScale);
+    drawImageOrPlaceholder(
+      this.img,
+      -this.w / 2,
+      -this.h / 2,
+      this.w,
+      this.h,
+      this.type.toUpperCase()
+    );
+    if (this.selected) {
+      noFill();
+      stroke("#3b82f6");
+      strokeWeight(2);
+      rectMode(CENTER);
+      rect(0, 0, this.w, this.h);
+      const s = this.handleSize;
+      noStroke();
+      fill("#3b82f6");
+      rect(-this.w / 2, -this.h / 2, s, s);
+      rect(this.w / 2, this.h / 2, s, s);
+      rect(-this.w / 2, this.h / 2, s, s);
+      const topY = -this.h / 2,
+        cy = topY - this.rotHandleGap;
+      stroke("#3b82f6");
+      strokeWeight(2);
+      line(0, topY, 0, cy);
+      noStroke();
+      fill("#3b82f6");
+      circle(0, cy, this.rotHandleR * 2);
+      const ds = this.delSize,
+        cxDel = this.w / 2,
+        cyDel = -this.h / 2;
+      push();
+      rectMode(CENTER);
+      noStroke();
+      fill("#ef4444");
+      rect(cxDel, cyDel, ds, ds);
+      stroke(255);
+      strokeWeight(2);
+      line(
+        cxDel - ds * 0.3,
+        cyDel - ds * 0.3,
+        cxDel + ds * 0.3,
+        cyDel + ds * 0.3
+      );
+      line(
+        cxDel - ds * 0.3,
+        cyDel + ds * 0.3,
+        cxDel + ds * 0.3,
+        cyDel - ds * 0.3
+      );
+      pop();
+    }
+    pop();
+  }
+  screenToLocal(mx, my) {
+    const cx = this.x + this.w / 2,
+      cy = this.y + this.h / 2;
+    let px = mx - cx,
+      py = my - cy;
+    const c = Math.cos(-this.angle),
+      s = Math.sin(-this.angle);
+    const rx = px * c - py * s,
+      ry = px * s + py * c;
+    return { x: rx / this.scale, y: ry / this.scale };
+  }
+  contains(mx, my) {
+    const p = this.screenToLocal(mx, my);
+    return (
+      p.x >= -this.w / 2 &&
+      p.x <= this.w / 2 &&
+      p.y >= -this.h / 2 &&
+      p.y <= this.h / 2
+    );
+  }
+  hitWhat(mx, my) {
+    if (!this.selected) return null;
+    const p = this.screenToLocal(mx, my),
+      s = this.handleSize,
+      half = s / 2;
+    const ds = this.delSize,
+      cxDel = this.w / 2,
+      cyDel = -this.h / 2;
+    if (Math.abs(p.x - cxDel) <= ds / 2 && Math.abs(p.y - cyDel) <= ds / 2)
+      return { type: "delete" };
+    const corners = {
+      nw: { x: -this.w / 2, y: -this.h / 2 },
+      se: { x: this.w / 2, y: this.h / 2 },
+      sw: { x: -this.w / 2, y: this.h / 2 },
+    };
+    for (const k of ["nw", "se", "sw"]) {
+      const c = corners[k];
+      if (
+        p.x >= c.x - half &&
+        p.x <= c.x + half &&
+        p.y >= c.y - half &&
+        p.y <= c.y + half
+      )
+        return { type: "resize", corner: k };
+    }
+    const topY = -this.h / 2,
+      cy = topY - this.rotHandleGap,
+      d = dist(p.x, p.y, 0, cy);
+    if (d <= this.rotHandleR + 2) return { type: "rotate" };
+    return null;
+  }
+
+  // === 오프스크린 그래픽(p5.Graphics)에 그리기 (내보내기용) ===
+  drawTo(pg) {
+    const hoverScale = 1.0; // 내보내기는 hover 효과 없이
+    pg.push();
+    pg.translate(this.x + this.w / 2, this.y + this.h / 2);
+    pg.rotate(this.angle);
+    pg.scale(this.scale * hoverScale);
+    if (this.img) {
+      pg.image(this.img, -this.w / 2, -this.h / 2, this.w, this.h);
+    } else {
+      pg.push();
+      pg.noStroke();
+      pg.fill(245);
+      pg.rect(-this.w / 2, -this.h / 2, this.w, this.h, 10);
+      pg.pop();
+    }
+    pg.pop();
+  }
+}
+
+/* ========================
+    p5 lifecycle
+======================== */
 function preload() {
-  // TODO: 이미지 로드
-  bgImage = loadImage('images/background.png');
+  bgImg = loadImage("assets/background.png");
+  myFont = loadFont("assets/Jalnan2.otf");
+
+  for (const f of frameDefs) {
+    frames[f.key] = loadImage(f.src);
+  }
+  for (const s of stickerDefs) {
+    stickers[s.key] = loadImage(s.src);
+  }
+
+  penImg = loadImage("assets/pen2.png");
+  eraserImg = loadImage("assets/eraser2.png");
+  cameraBg = loadImage("assets/camera2.png");
 }
 
 function setup() {
-  createCanvas(600, 600);
-
-  // 초기 파티클 생성
-  for (let i = 0; i < 5; i++) {
-    particles.push(new Particle(random(width), random(height)));
-  }
-
-  textAlign(CENTER, CENTER);
+  createCanvas(windowWidth, windowHeight);
+  textFont(myFont);
+  textSize(32);
+  updateLayout();
+  recreateDrawingLayers(null, null);
+  cam = createCapture(VIDEO, () => {
+    webcamReady = true;
+  });
+  cam.hide();
 }
-
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  const ob = drawingBelow,
+    oa = drawingAbove;
+  updateLayout();
+  recreateDrawingLayers(ob, oa);
+}
+function recreateDrawingLayers(oldBelow, oldAbove) {
+  const newW = UI.diaryFrameRect.w - UI.diaryFrameRect.pad * 2;
+  const newH = UI.diaryFrameRect.h - UI.diaryFrameRect.pad * 2;
+  const nb = createGraphics(newW, newH);
+  nb.clear();
+  const na = createGraphics(newW, newH);
+  na.clear();
+  if (oldBelow) nb.image(oldBelow, 0, 0, newW, newH);
+  if (oldAbove) na.image(oldAbove, 0, 0, newW, newH);
+  drawingBelow = nb;
+  drawingAbove = na;
+}
 function draw() {
-  // 배경
-  if (bgImage) {
-    image(bgImage, 0, 0, width, height);
-    // 반투명 오버레이
-    fill(0, 0, 0, 100);
-    rect(0, 0, width, height);
+  drawCoverImage(bgImg, width, height);
+
+  // 프레임
+  const frameKey = frameDefs[currentFrameIdx].key;
+  drawImageOrPlaceholder(
+    frames[frameKey],
+    UI.diaryFrameRect.x,
+    UI.diaryFrameRect.y,
+    UI.diaryFrameRect.w,
+    UI.diaryFrameRect.h,
+    "Frame"
+  );
+
+  const gx = UI.diaryFrameRect.x + UI.diaryFrameRect.pad;
+  const gy = UI.diaryFrameRect.y + UI.diaryFrameRect.pad;
+
+  const photoItems = [];
+  const stickerItems = [];
+  for (const d of draggables) {
+    if (d.type === "photo") photoItems.push(d);
+    else stickerItems.push(d);
+  }
+
+  // 1) 사진을 먼저 그려서 펜이 위에 오도록 함
+  for (const photo of photoItems) photo.draw();
+
+  // 2) 펜/지우개 레이어
+  image(drawingBelow, gx, gy);
+
+  // 3) 스티커 등 나머지 드래그 아이템
+  for (const item of stickerItems) item.draw();
+
+  image(drawingAbove, gx, gy);
+
+  // 패널
+  drawStickerPanel();
+  drawToolPanel();
+  drawFrameMenu();
+  drawWebcamPanel();
+  drawGuidelinePanel();
+
+  handleDrawing();
+
+  if (spawnDrag) {
+    const img = stickers[spawnDrag.key];
+    const dw = spawnDrag.w,
+      dh = spawnDrag.h,
+      dx = mouseX - dw / 2,
+      dy = mouseY - dh / 2;
+    push();
+    if (img) tint(255, 200);
+    drawImageOrPlaceholder(img, dx, dy, dw, dh, "STICKER");
+    pop();
+  }
+  setCursorSmart();
+}
+
+/* ========================
+    Panels
+======================== */
+function getFrameButtonRects() {
+  const { x, y, w, h, padX = 10, padY = 10 } = UI.frameMenu;
+  const { cols, rows, gap } = FRAME_MENU_GRID;
+  const titleLineHeight = FRAME_MENU_TITLE_LINE;
+  const titleArea = titleLineHeight + gap;
+
+  const innerW = w - padX * 2;
+  const innerH = h - padY * 2 - titleArea;
+
+  const btnW = (innerW - gap * (cols - 1)) / cols;
+  const btnH = (innerH - gap * (rows - 1)) / rows;
+
+  const btnHScaled = btnH * FRAME_BTN_HEIGHT_SCALE;
+  const yPaddingEach = (btnH - btnHScaled) / 2;
+
+  const startX = x + padX;
+  const startY = y + padY + titleLineHeight + gap;
+
+  const rects = [];
+  for (let i = 0; i < Math.min(frameDefs.length, cols * rows); i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    rects.push({
+      rect: {
+        x: startX + col * (btnW + gap),
+        y: startY + row * (btnH + gap) + yPaddingEach, // 가운데 정렬되게 보정
+        w: btnW,
+        h: btnHScaled,
+      },
+      index: i,
+    });
+  }
+  return rects;
+}
+
+function drawFrameMenu() {
+  const { x, y, w, h, padX = 20, padY = 20 } = UI.frameMenu;
+  drawPanel(
+    x,
+    y,
+    w,
+    h,
+    FRAME_MENU_TITLE,
+    PANEL_BG_COLOR,
+    PANEL_TITLE_COLOR,
+    padX,
+    padY,
+    RIGHT_PANEL_TITLE_FONT_SIZE
+  );
+  const btnRects = getFrameButtonRects();
+  frameBtnRects = btnRects;
+
+  push();
+  textSize(RIGHT_PANEL_BUTTON_FONT_SIZE);
+  textStyle(NORMAL);
+  rectMode(CORNER);
+
+  for (const { rect: btnRect, index } of btnRects) {
+    const hovered = inRect(mouseX, mouseY, btnRect);
+    const active = index === currentFrameIdx;
+    const baseColor = active ? "#7A4100" : hovered ? "#FFD859" : "#FDE7C7";
+    const textColor = active ? "#FFFFFF" : "#7A4100";
+
+    noStroke();
+    fill(baseColor);
+    rect(btnRect.x, btnRect.y, btnRect.w, btnRect.h, 12);
+
+    fill(textColor);
+    textAlign(CENTER, CENTER);
+    text(
+      frameDefs[index].label,
+      btnRect.x + btnRect.w / 2,
+      btnRect.y + btnRect.h / 2
+    );
+  }
+  pop();
+}
+
+// 패널 내부에서 (제목/하단 도움말 제외) 영역 기준으로 그리드를 가로·세로 모두 중앙 배치
+function computeStickerGridOrigin() {
+  const { x, y, w, h, padX, padY, cell, gap, cols, rows } = UI.stickerPanel;
+
+  const innerW = w - padX * 2;
+  const innerH = h - padY * 2;
+
+  const gridW = cols * cell + (cols - 1) * gap;
+  const gridH = rows * cell + (rows - 1) * gap;
+
+  const offsetX = Math.max(0, (innerW - gridW) / 2);
+  const offsetY = Math.max(0, (innerH - gridH) / 2);
+
+  const startX = x + padX + offsetX;
+  const startY = y + padY + offsetY;
+
+  return { startX, startY };
+}
+
+function drawStickerPanel() {
+  const { x, y, w, h, padX, padY, cell, gap, cols, rows } = UI.stickerPanel;
+  drawPanel(x, y, w, h);
+
+  const { startX, startY } = computeStickerGridOrigin();
+
+  push();
+  for (let i = 0; i < Math.min(stickerDefs.length, cols * rows); i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const r = {
+      x: startX + col * (cell + gap),
+      y: startY + row * (cell + gap),
+      w: cell,
+      h: cell,
+    };
+
+    const hovered = inRect(mouseX, mouseY, r);
+    const img = stickers[stickerDefs[i].key];
+
+    const m = 8; // 셀 안쪽 여백
+    const baseW = cell - 2 * m;
+    const baseH = cell - 2 * m;
+    const s = hovered ? 1.06 : 1.0;
+    const dw = baseW * s,
+      dh = baseH * s;
+    const dx = r.x + m + (baseW - dw) / 2;
+    const dy = r.y + m + (baseH - dh) / 2;
+
+    drawImageOrPlaceholder(img, dx, dy, dw, dh, stickerDefs[i].label);
+  }
+}
+
+function drawWebcamPanel() {
+  const { x, y, w, h } = UI.webcamPanel;
+
+  const framePad = Math.min(
+    32,
+    Math.max(18, Math.floor(Math.min(w, h) * 0.08))
+  );
+  const innerX = x + framePad;
+  const innerY = y + framePad;
+  const innerW = w - framePad * 2;
+  const innerH = h - framePad * 2;
+
+  if (!UI.webcamRects) UI.webcamRects = {};
+  const R = UI.webcamRects;
+
+  push();
+  translate(innerX, innerY);
+
+  // 1) camera.png: cover + 오버스케일
+  let bgRect = { x: 0, y: 0, w: innerW, h: innerH };
+  if (cameraBg) {
+    const ir = cameraBg.width / cameraBg.height;
+    const boxR = innerW / innerH;
+    let dw, dh;
+    if (boxR > ir) {
+      dw = innerW;
+      dh = innerW / ir;
+    } else {
+      dh = innerH;
+      dw = innerH * ir;
+    }
+
+    const OVER = 1.3; // 배경을 더 크게
+    dw *= OVER;
+    dh *= OVER;
+
+    const bgX = (innerW - dw) / 2;
+    const bgY = (innerH - dh) / 2;
+    image(cameraBg, bgX, bgY, dw, dh);
+    bgRect = { x: bgX, y: bgY, w: dw, h: dh };
   } else {
-    background(20, 20, 40);
+    push();
+    noStroke();
+    fill(255, 240, 220, 180);
+    rect(0, 0, innerW, innerH, 12);
+    pop();
   }
+  R.bgRect = { ...bgRect, absX: innerX + bgRect.x, absY: innerY + bgRect.y };
 
-  // 모든 파티클 업데이트 및 표시
-  for (let i = particles.length - 1; i >= 0; i--) {
-    particles[i].update();
-    particles[i].display();
+  // 2) 웹캠: 배경 대비 1/1.8 배(= 약 0.556)로 고정, 중앙 정렬
+  const webcamOffsetY = 4; // 필요시 아래로 내리기
+  const VIEW_REL = 1 / 1.8;
 
-    // 화면 밖으로 나간 파티클 제거
-    if (particles[i].isOffScreen()) {
-      particles.splice(i, 1);
+  // 배경 사각형의 크기에 대한 상대 크기
+  let viewW = Math.max(20, bgRect.w * VIEW_REL);
+  let viewH = Math.max(20, bgRect.h * VIEW_REL);
+
+  // 중앙 정렬 + 약간 아래로
+  const vx = bgRect.x + (bgRect.w - viewW) / 2;
+  const vy = bgRect.y + (bgRect.h - viewH) / 2 + webcamOffsetY;
+
+  // 3) 카메라 영상: viewRect 안에 contain
+  if (webcamReady) {
+    const camIR = (cam.width || 4) / (cam.height || 3);
+    const boxR = viewW / viewH;
+    let dw2, dh2;
+    if (boxR > camIR) {
+      dh2 = viewH;
+      dw2 = dh2 * camIR;
+    } else {
+      dw2 = viewW;
+      dh2 = dw2 / camIR;
     }
+
+    image(cam, vx + (viewW - dw2) / 2, vy + (viewH - dh2) / 2, dw2, dh2);
+  } else {
+    push();
+    noStroke();
+    fill(0, 0, 0, 110);
+    rect(vx, vy, viewW, viewH, 20);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(RIGHT_PANEL_BODY_FONT_SIZE);
+    text("웹캠 준비중", vx + viewW / 2, vy + viewH / 2);
+    pop();
   }
 
-  // 모든 컨페티 업데이트 및 표시
-  for (let i = confettiList.length - 1; i >= 0; i--) {
-    confettiList[i].update();
-    confettiList[i].display();
-
-    if (confettiList[i].isOffScreen()) {
-      confettiList.splice(i, 1);
-    }
-  }
-
-  // 모든 버블 업데이트 및 표시
-  for (let i = bubbles.length - 1; i >= 0; i--) {
-    bubbles[i].update();
-    bubbles[i].display();
-
-    if (bubbles[i].isOffScreen()) {
-      bubbles.splice(i, 1);
-    }
-  }
-
-  // 안내 텍스트
-  displayInstructions();
+  R.viewRect = {
+    x: vx,
+    y: vy,
+    w: viewW,
+    h: viewH,
+    absX: innerX + vx,
+    absY: innerY + vy,
+  };
+  pop();
 }
 
-function displayInstructions() {
+function drawGuidelinePanel() {
+  const panel = UI.guidelinePanel;
+  if (!panel) return;
+  const { x, y, w, h, padX = 20, padY = 20 } = panel;
+  drawPanel(
+    x,
+    y,
+    w,
+    h,
+    GUIDELINE_TITLE,
+    PANEL_BG_COLOR,
+    PANEL_TITLE_COLOR,
+    padX,
+    padY,
+    RIGHT_PANEL_TITLE_FONT_SIZE
+  );
+  const contentX = x + padX;
+  const contentY = y + padY + FRAME_MENU_TITLE_LINE + FRAME_MENU_GRID.gap;
+  const contentW = w - padX * 2;
+  const contentH = h - (contentY - y) - padY;
+  push();
+  fill(PANEL_TITLE_COLOR);
+  textSize(RIGHT_PANEL_TITLE_FONT_SIZE);
+  textAlign(LEFT, TOP);
+  textLeading(GUIDELINE_TEXT_LEADING);
+  renderParagraphs(
+    GUIDELINE_TEXT,
+    contentX,
+    contentY,
+    contentW,
+    contentH,
+    GUIDELINE_TEXT_LEADING,
+    PARAGRAPH_GAP
+  );
+  pop();
+}
+
+function drawToolPanel() {
+  const { x, y, w, h, padX = 12, padY = 12 } = UI.toolPanel;
+
+  drawPanel(x, y, w, h, "");
+
+  const innerX = x + padX;
+  const innerY = y + padY;
+  const innerW = w - padX * 2;
+  const innerH = h - padY * 2;
+
+  const sizes = [6, 9, 12, 16];
+  const sizeBox = 26;
+  const sizeSpacing = 12;
+  const colorSize = 26;
+  const colorSpacing = 12;
+
+  const sizeHeight = sizes.length * sizeBox + (sizes.length - 1) * sizeSpacing;
+  const colorHeight =
+    palette.length * colorSize + (palette.length - 1) * colorSpacing;
+
+  const groupGap = 4;
+  const groupCount = 2;
+  const minGroupWidth = 120;
+  let groupWidth = (innerW - groupGap * (groupCount - 1)) / groupCount;
+  if (groupWidth < minGroupWidth) {
+    groupWidth = minGroupWidth;
+  }
+  const layoutWidth = groupWidth * groupCount + groupGap * (groupCount - 1);
+  const startX = innerX + Math.max(0, (innerW - layoutWidth) / 2);
+
+  const toolGroupX = startX;
+  const paletteGroupX = toolGroupX + groupWidth + groupGap;
+
+  const PALETTE_WIDTH_FACTOR = 0.4;
+  const palettePadX = 16; // 좌우 여백
+  const palettePadY = 14; // 상하 여백
+
+  const paletteInnerHeight = Math.max(sizeHeight, colorHeight);
+  const paletteBoxHeight = paletteInnerHeight + palettePadY * 2;
+  const TOOL_BTN_SCALE = 1.08;
+  const toolBtnHeightPlanned = Math.min(
+    paletteBoxHeight * TOOL_BTN_SCALE,
+    innerH
+  );
+  const contentHeight = Math.max(paletteBoxHeight, toolBtnHeightPlanned);
+  const baseY = innerY + Math.max(0, (innerH - contentHeight) / 2);
+
+  const toolButtonsGap = 10;
+  const toolBtnHeight = toolBtnHeightPlanned;
+  const toolBtnWidth = Math.min(
+    (groupWidth - toolButtonsGap) / 2,
+    toolBtnHeight
+  );
+  const totalToolWidth = toolBtnWidth * 2 + toolButtonsGap;
+  const toolBtnX = toolGroupX + (groupWidth - totalToolWidth) / 2;
+  const toolStartY = baseY;
+
+  penBtnRect = {
+    x: toolBtnX,
+    y: toolStartY,
+    w: toolBtnWidth,
+    h: toolBtnHeight,
+  };
+  eraserBtnRect = {
+    x: toolBtnX + toolBtnWidth + toolButtonsGap,
+    y: toolStartY,
+    w: toolBtnWidth,
+    h: toolBtnHeight,
+  };
+
+  drawImageOnlyButton(penBtnRect, penImg, drawTool === "pen");
+  drawImageOnlyButton(eraserBtnRect, eraserImg, drawTool === "eraser");
+
+  const paletteWidth = Math.max(
+    Math.min(groupWidth * PALETTE_WIDTH_FACTOR, groupWidth - 24),
+    120
+  );
+  const paletteRect = {
+    x: paletteGroupX + (groupWidth - paletteWidth) / 2,
+    y: baseY,
+    w: paletteWidth,
+    h: paletteBoxHeight,
+  };
+  push();
+  noStroke();
+  fill("#FFEEDA");
+  rect(paletteRect.x, paletteRect.y, paletteRect.w, paletteRect.h, 7);
+  pop();
+
+  sizeBtnRects = [];
+  const paletteInnerWidth = paletteRect.w - palettePadX * 2;
+  const paletteGap = 16;
+  const paletteUsedWidth = sizeBox + colorSize + paletteGap;
+  const paletteOffset = Math.max(0, (paletteInnerWidth - paletteUsedWidth) / 2);
+  const sizeX = paletteRect.x + palettePadX + paletteOffset;
+  let sizeY =
+    paletteRect.y + palettePadY + (paletteInnerHeight - sizeHeight) / 2;
+
+  sizes.forEach((s) => {
+    const r = { x: sizeX, y: sizeY, w: sizeBox, h: sizeBox };
+    sizeBtnRects.push({ rect: r, size: s });
+
+    const hovered = inRect(mouseX, mouseY, r);
+    const active =
+      (drawTool === "pen" && penSize === s) ||
+      (drawTool === "eraser" && eraserSize === s);
+    const scaleFactor = hovered ? 1.25 : 1.0;
+
+    push();
+    translate(r.x + r.w / 2, r.y + r.h / 2);
+    scale(scaleFactor);
+
+    if (active) {
+      stroke("#ff6666");
+      strokeWeight(2);
+    } else {
+      noStroke();
+    }
+
+    fill("#111827");
+    circle(0, 0, s * 1.4);
+    pop();
+
+    sizeY += sizeBox + sizeSpacing;
+  });
+
+  colorBtnRects = [];
+  const colorX = sizeX + sizeBox + paletteGap;
+  let colorY =
+    paletteRect.y + palettePadY + (paletteInnerHeight - colorHeight) / 2;
+
+  const colorDisabled = drawTool === "eraser";
+
+  palette.forEach((c) => {
+    const r = { x: colorX, y: colorY, w: colorSize, h: colorSize };
+    colorBtnRects.push({ rect: r, color: c });
+
+    const hovered = !colorDisabled && inRect(mouseX, mouseY, r);
+    const active = !colorDisabled && c === brushColor;
+    const scaleFactor = hovered ? 1.15 : 1.0;
+
+    push();
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    translate(cx, cy);
+    scale(scaleFactor);
+    rectMode(CENTER);
+
+    if (active) {
+      stroke("#ff6666");
+      strokeWeight(2);
+    } else {
+      noStroke();
+    }
+
+    fill(c);
+    rect(0, 0, r.w, r.h, 6);
+    pop();
+
+    colorY += colorSize + colorSpacing;
+  });
+}
+function drawButton(r, label, active = false) {
+  const hovered = inRect(mouseX, mouseY, r);
+  push();
+  noStroke();
+  fill(active ? "#1f2937" : hovered ? "#374151" : "#4b5563");
+  rect(r.x, r.y, r.w, r.h, 10);
   fill(255);
-  stroke(0);
-  strokeWeight(2);
-  textSize(18);
-  text('클릭: 파티클 생성 | 키보드 1: 기본 | 2: 컨페티 | 3: 버블', width / 2, 30);
-
-  textSize(14);
-  text(`현재 모드: ${getModeText()}`, width / 2, 55);
-  text(`파티클 수: ${particles.length + confettiList.length + bubbles.length}`, width / 2, 75);
+  textSize(13);
+  textAlign(CENTER, CENTER);
+  text(label, r.x + r.w / 2, r.y + r.h / 2);
+  pop();
 }
 
-function getModeText() {
-  if (mode === 'particle') return '✨ 기본 파티클';
-  if (mode === 'confetti') return '🎉 컨페티';
-  if (mode === 'bubble') return '🫧 버블';
-}
-
+/* ========================
+    Input
+======================== */
 function mousePressed() {
-  // 마우스 위치에 파티클 생성
-  if (mode === 'particle') {
-    particles.push(new Particle(mouseX, mouseY));
-  } else if (mode === 'confetti') {
-    // 컨페티는 여러 개 한번에
-    for (let i = 0; i < 10; i++) {
-      confettiList.push(new Confetti(mouseX, mouseY));
+  // 우측 프레임 메뉴
+  const { x, y, w, h } = UI.frameMenu;
+  if (inRect(mouseX, mouseY, { x, y, w, h })) {
+    const candidates = frameBtnRects.length
+      ? frameBtnRects
+      : getFrameButtonRects();
+    for (const { rect, index } of candidates) {
+      if (inRect(mouseX, mouseY, rect)) {
+        currentFrameIdx = index;
+        return;
+      }
     }
-  } else if (mode === 'bubble') {
-    bubbles.push(new Bubble(mouseX, mouseY));
   }
+
+  // 좌측 스티커 패널
+  if (inRect(mouseX, mouseY, UI.stickerPanel)) {
+    const slot = locateStickerSlot(mouseX, mouseY);
+    if (slot) {
+      const sd = stickerDefs[slot.idx];
+      spawnDrag = { type: "sticker", key: sd.key, w: 96, h: 96 };
+      return;
+    }
+  }
+
+  // 툴 패널
+  if (inRect(mouseX, mouseY, UI.toolPanel)) {
+    handleToolPanelClick();
+    return;
+  }
+
+  // 선택/드로잉 초기화
+  blockDrawThisPress = false;
+  drawingThisStroke = false;
+  currentStrokeLayer = null;
+
+  // 선택된 스티커의 핸들/삭제
+  for (let i = draggables.length - 1; i >= 0; i--) {
+    const sel = draggables[i];
+    const hit = sel.hitWhat(mouseX, mouseY);
+    if (hit) {
+      if (hit.type === "delete") {
+        draggables.splice(i, 1);
+        draggingIdx = -1;
+        activeMode = null;
+        blockDrawThisPress = true;
+        return;
+      }
+      draggables.forEach((d) => (d.selected = false));
+      sel.selected = true;
+      draggingIdx = i;
+      activeMode = hit.type === "resize" ? `resize-${hit.corner}` : "rotate";
+      startMouse.x = mouseX;
+      startMouse.y = mouseY;
+      startPos.x = sel.x;
+      startPos.y = sel.y;
+      startScale = sel.scale;
+      startAngle = sel.angle;
+      return;
+    }
+  }
+
+  // 스티커 본체 선택/이동 (handles 외 영역)
+  for (let i = draggables.length - 1; i >= 0; i--) {
+    const sel = draggables[i];
+    if (sel.contains(mouseX, mouseY)) {
+      draggables.forEach((d, idx) => {
+        d.selected = idx === i;
+      });
+      draggingIdx = i;
+      activeMode = "move";
+      startMouse.x = mouseX;
+      startMouse.y = mouseY;
+      startPos.x = sel.x;
+      startPos.y = sel.y;
+      clampDraggableToFrame(sel);
+      blockDrawThisPress = true;
+      return;
+    }
+  }
+
+  // 선택 해제
+  let had = false;
+  draggables.forEach((d) => {
+    if (d.selected) had = true;
+    d.selected = false;
+  });
+  if (had) {
+    blockDrawThisPress = true;
+    activeMode = null;
+    draggingIdx = -1;
+    return;
+  }
+
+  // 프레임 내부 드로잉
+  const f = UI.diaryFrameRect,
+    gx = f.x + f.pad,
+    gy = f.y + f.pad;
+  const inside =
+    mouseX >= gx &&
+    mouseX <= gx + drawingBelow.width &&
+    mouseY >= gy &&
+    mouseY <= gy + drawingBelow.height;
+  if (inside && (drawTool === "pen" || drawTool === "eraser")) {
+    drawingThisStroke = true;
+    currentStrokeLayer = "below";
+    return;
+  }
+}
+
+function mouseDragged() {
+  if (spawnDrag) return;
+
+  if (draggingIdx >= 0 && activeMode) {
+    const item = draggables[draggingIdx];
+    if (activeMode === "move") {
+      const dx = mouseX - startMouse.x,
+        dy = mouseY - startMouse.y;
+      item.x = startPos.x + dx;
+      item.y = startPos.y + dy;
+      clampDraggableToFrame(item);
+      return;
+    }
+    if (activeMode.startsWith("resize-")) {
+      const cx = item.x + item.w / 2,
+        cy = item.y + item.h / 2;
+      const d0 = Math.hypot(startMouse.x - cx, startMouse.y - cy),
+        d1 = Math.hypot(mouseX - cx, mouseY - cy);
+      let s = startScale * (d1 / Math.max(30, d0));
+      item.scale = constrain(s, 0.2, 5.0);
+      clampDraggableToFrame(item);
+      return;
+    }
+    if (activeMode === "rotate") {
+      const cx = item.x + item.w / 2,
+        cy = item.y + item.h / 2;
+      const a0 = Math.atan2(startMouse.y - cy, startMouse.x - cx),
+        a1 = Math.atan2(mouseY - cy, mouseX - cx);
+      item.angle = startAngle + (a1 - a0);
+      return;
+    }
+  }
+
+}
+
+function mouseReleased() {
+  if (spawnDrag) {
+    const { x, y, w, h } = UI.diaryFrameRect;
+    if (inRect(mouseX, mouseY, { x, y, w, h })) {
+      const key = spawnDrag.key,
+        img = stickers[key];
+      const nx = mouseX - spawnDrag.w / 2,
+        ny = mouseY - spawnDrag.h / 2;
+      const newItem = new DraggableItem({
+        type: "sticker",
+        key,
+        img,
+        x: nx,
+        y: ny,
+        w: spawnDrag.w,
+        h: spawnDrag.h,
+      });
+      clampDraggableToFrame(newItem);
+      draggables.push(newItem);
+    }
+    spawnDrag = null;
+  }
+
+  draggingIdx = -1;
+  activeMode = null;
+  blockDrawThisPress = false;
+  drawingThisStroke = false;
+  currentStrokeLayer = null;
 }
 
 function keyPressed() {
-  // 모드 변경
-  if (key === '1') {
-    mode = 'particle';
-  } else if (key === '2') {
-    mode = 'confetti';
-  } else if (key === '3') {
-    mode = 'bubble';
+  const numericIdx = parseInt(key, 10) - 1;
+  if (
+    !Number.isNaN(numericIdx) &&
+    numericIdx >= 0 &&
+    numericIdx < frameDefs.length
+  ) {
+    currentFrameIdx = numericIdx;
+    return;
+  }
+  if (key === "P" || key === "p") takePhotoIntoCanvas();
+  // 저장 단축키
+  if (key === "S" || key === "s") {
+    if (window.exportFrameToFirebase) window.exportFrameToFirebase();
   }
 }
+
+/* ========================
+    Helpers
+======================== */
+function locateStickerSlot(mx, my) {
+  const { cell, gap, cols, rows } = UI.stickerPanel;
+  const { startX, startY } = computeStickerGridOrigin();
+  for (let i = 0; i < Math.min(stickerDefs.length, cols * rows); i++) {
+    const col = i % cols,
+      row = Math.floor(i / cols);
+    const r = {
+      x: startX + col * (cell + gap),
+      y: startY + row * (cell + gap),
+      w: cell,
+      h: cell,
+    };
+    if (inRect(mx, my, r)) return { idx: i, rect: r };
+  }
+  return null;
+}
+function handleToolPanelClick() {
+  // 1) 펜 / 지우개 클릭
+  if (penBtnRect && inRect(mouseX, mouseY, penBtnRect)) {
+    drawTool = "pen";
+    return;
+  }
+  if (eraserBtnRect && inRect(mouseX, mouseY, eraserBtnRect)) {
+    drawTool = "eraser";
+    return;
+  }
+
+  // 2) 굵기 버튼 클릭
+  for (const sBtn of sizeBtnRects) {
+    if (inRect(mouseX, mouseY, sBtn.rect)) {
+      if (drawTool === "pen") penSize = sBtn.size;
+      else eraserSize = sBtn.size;
+      return;
+    }
+  }
+
+  // 3) 색상 버튼 클릭 (펜 모드일 때만 동작)
+  if (drawTool !== "eraser") {
+    for (const cBtn of colorBtnRects) {
+      if (inRect(mouseX, mouseY, cBtn.rect)) {
+        brushColor = cBtn.color;
+        drawTool = "pen"; // 색 선택하면 펜 모드로 전환
+        return;
+      }
+    }
+  }
+}
+
+function isMouseOverPanelSticker(mx, my) {
+  const { cell, gap, cols, rows } = UI.stickerPanel;
+  const { startX, startY } = computeStickerGridOrigin();
+  for (let i = 0; i < Math.min(stickerDefs.length, cols * rows); i++) {
+    const col = i % cols,
+      row = Math.floor(i / cols);
+    const r = {
+      x: startX + col * (cell + gap),
+      y: startY + row * (cell + gap),
+      w: cell,
+      h: cell,
+    };
+    if (inRect(mx, my, r)) return true;
+  }
+  return false;
+}
+function isMouseOverToolButtons(mx, my) {
+  if (penBtnRect && inRect(mx, my, penBtnRect)) return true;
+  if (eraserBtnRect && inRect(mx, my, eraserBtnRect)) return true;
+  return false;
+}
+function isMouseOverSizeButtons(mx, my) {
+  for (const btn of sizeBtnRects) {
+    if (inRect(mx, my, btn.rect)) return true;
+  }
+  return false;
+}
+function isMouseOverColorButtons(mx, my) {
+  for (const btn of colorBtnRects) {
+    if (inRect(mx, my, btn.rect)) return true;
+  }
+  return false;
+}
+function isMouseOverFrameButtons(mx, my) {
+  for (const btn of frameBtnRects) {
+    if (inRect(mx, my, btn.rect)) return true;
+  }
+  return false;
+}
+function isMouseInFrame(mx, my) {
+  const f = UI.diaryFrameRect,
+    gx = f.x + f.pad,
+    gy = f.y + f.pad;
+  return (
+    mx >= gx &&
+    mx <= gx + drawingBelow.width &&
+    my >= gy &&
+    my <= gy + drawingBelow.height
+  );
+}
+function handleDrawing() {
+  if (
+    (draggingIdx >= 0 || spawnDrag || activeMode || blockDrawThisPress) &&
+    !drawingThisStroke
+  )
+    return;
+  if (!mouseIsPressed) return;
+  if (!(drawTool === "pen" || drawTool === "eraser")) return;
+  if (!isMouseInFrame(mouseX, mouseY)) return;
+
+  const layer = currentStrokeLayer === "above" ? drawingAbove : drawingBelow;
+  const f = UI.diaryFrameRect,
+    gx = f.x + f.pad,
+    gy = f.y + f.pad;
+  const pmx = constrain(pmouseX - gx, 0, layer.width),
+    pmy = constrain(pmouseY - gy, 0, layer.height);
+  const mx = constrain(mouseX - gx, 0, layer.width),
+    my = constrain(mouseY - gy, 0, layer.height);
+
+  if (drawTool === "pen") {
+    layer.noErase();
+    layer.stroke(brushColor);
+    layer.strokeWeight(penSize);
+    layer.strokeCap(ROUND);
+    layer.line(pmx, pmy, mx, my);
+  } else if (drawTool === "eraser") {
+    layer.erase();
+    layer.strokeWeight(eraserSize);
+    layer.line(pmx, pmy, mx, my);
+    layer.noErase();
+  }
+}
+// 이미지 자체를 버튼으로 쓰는 헬퍼 (배경 없음)
+function drawImageOnlyButton(r, img, active = false) {
+  if (!img) return;
+
+  const hovered = inRect(mouseX, mouseY, r);
+  const lift = active ? 30 : hovered ? 5 : 0; // 위로 떠오르기(px)
+
+  // 아이콘 비율 유지해 r 영역 안에 맞춤
+  const iw = r.w,
+    ih = r.h;
+  const ir = img.width / img.height;
+  const rr = iw / ih;
+  let dw = iw,
+    dh = ih;
+  if (rr > ir) {
+    // 가로가 넓은 버튼 → 높이에 맞춤
+    dh = ih;
+    dw = ih * ir;
+  } else {
+    // 세로가 높은 버튼 → 너비에 맞춤
+    dw = iw;
+    dh = iw / ir;
+  }
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2 - lift;
+
+  image(img, cx - dw / 2, cy - dh / 2, dw, dh);
+}
+function drawIconButton(r, img, active = false) {
+  const hovered = inRect(mouseX, mouseY, r);
+  const lift = active ? 6 : hovered ? 3 : 0;
+
+  push();
+  noStroke();
+  fill(active ? "#1f2937" : hovered ? "#374151" : "#4b5563");
+  rect(r.x, r.y, r.w, r.h, 10);
+
+  const pad = 8;
+  const iw = r.w - pad * 2;
+  const ih = r.h - pad * 2;
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2 - lift;
+
+  if (img) {
+    const ir = img.width / img.height;
+    let dw = iw,
+      dh = ih;
+    const rr = iw / ih;
+    if (rr > ir) {
+      dw = ih * ir;
+      dh = ih;
+    } else {
+      dh = iw / ir;
+      dw = iw;
+    }
+    image(img, cx - dw / 2, cy - dh / 2, dw, dh);
+  } else {
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text("Icon", cx, cy);
+  }
+  pop();
+}
+
+function takePhotoIntoCanvas() {
+  if (!webcamReady) return;
+  const snap = cam.get(),
+    Wmax = 240,
+    Hmax = 180,
+    ratio = Math.min(Wmax / snap.width, Hmax / snap.height);
+  const w = snap.width * ratio,
+    h = snap.height * ratio;
+  const cx = UI.diaryFrameRect.x + UI.diaryFrameRect.w / 2 - w / 2;
+  const cy = UI.diaryFrameRect.y + UI.diaryFrameRect.h / 2 - h / 2;
+  const newItem = new DraggableItem({
+    type: "photo",
+    img: snap,
+    x: cx,
+    y: cy,
+    w,
+    h,
+  });
+  clampDraggableToFrame(newItem);
+  draggables.push(newItem);
+}
+function setCursorSmart() {
+  let cursorSet = false;
+  if (spawnDrag) {
+    cursor(HAND);
+    return;
+  }
+  for (let i = draggables.length - 1; i >= 0 && !cursorSet; i--) {
+    const item = draggables[i],
+      hit = item.hitWhat(mouseX, mouseY);
+    if (hit) {
+      if (hit.type === "delete") {
+        cursor(HAND);
+        cursorSet = true;
+        break;
+      }
+      if (hit.type === "rotate") {
+        cursor("grab");
+        cursorSet = true;
+        break;
+      }
+    }
+  }
+  if (!cursorSet) {
+    for (let i = draggables.length - 1; i >= 0 && !cursorSet; i--) {
+      const item = draggables[i],
+        hit = item.hitWhat(mouseX, mouseY);
+      if (hit && hit.type === "resize") {
+        const swap = needsResizeCursorSwap(item.angle);
+        let diag = hit.corner === "nw" || hit.corner === "se" ? "nwse" : "nesw";
+        if (swap) diag = diag === "nwse" ? "nesw" : "nwse";
+        cursor(diag + "-resize");
+        cursorSet = true;
+        break;
+      } else if (item.contains(mouseX, mouseY)) {
+        cursor(HAND);
+        cursorSet = true;
+        break;
+      }
+    }
+  }
+  if (
+    !cursorSet &&
+    (isMouseOverPanelSticker(mouseX, mouseY) ||
+      isMouseOverToolButtons(mouseX, mouseY) ||
+      isMouseOverSizeButtons(mouseX, mouseY) ||
+      isMouseOverColorButtons(mouseX, mouseY) ||
+      isMouseOverFrameButtons(mouseX, mouseY))
+  ) {
+    cursor(HAND);
+    cursorSet = true;
+  }
+  if (!cursorSet) cursor(ARROW);
+}
+
+/* ========================
+   Export (Frame → PNG → Firebase → QR)
+======================== */
+
+// 프레임 콘텐츠만 오프스크린으로 합성해서 반환
+function renderFrameToGraphic() {
+  const f = UI.diaryFrameRect;
+  const innerW = f.w - f.pad * 2;
+  const innerH = f.h - f.pad * 2;
+
+  const g = createGraphics(f.w, f.h);
+  g.clear();
+
+  // 1) 프레임 이미지
+  const frameKey = frameDefs[currentFrameIdx].key;
+  if (frames[frameKey]) {
+    g.image(frames[frameKey], 0, 0, f.w, f.h);
+  } else {
+    g.push();
+    g.noStroke();
+    g.fill(245);
+    g.rect(0, 0, f.w, f.h, 12);
+    g.pop();
+  }
+
+  // 2) 내부 패딩 영역으로 이동
+  g.push();
+  g.translate(f.pad, f.pad);
+
+  // 3) 아래 레이어
+  if (drawingBelow) g.image(drawingBelow, 0, 0, innerW, innerH);
+
+  // 4) 스티커/사진 (화면 좌표 → 프레임 기준으로 보정)
+  for (const d of draggables) {
+    g.push();
+    g.translate(-f.x, -f.y); // 화면 전역 좌표에서 프레임 기준으로 이동
+    d.drawTo(g);
+    g.pop();
+  }
+
+  // 5) 위 레이어
+  if (drawingAbove) g.image(drawingAbove, 0, 0, innerW, innerH);
+
+  g.pop();
+  return g;
+}
+
+// p5.Graphics → Blob → Firebase Storage 업로드
+async function uploadGraphicToFirebase(g) {
+  if (!window.__fb) {
+    alert("Firebase가 초기화되지 않았어요 (index.html 설정 확인)");
+    return null;
+  }
+  const { storage, ref, uploadBytes, getDownloadURL } = window.__fb;
+
+  const blob = await new Promise((resolve) => {
+    g.canvas.toBlob((b) => resolve(b), "image/png");
+  });
+  if (!blob) return null;
+
+  const now = new Date();
+  const y = now.getFullYear(),
+    m = String(now.getMonth() + 1).padStart(2, "0"),
+    d = String(now.getDate()).padStart(2, "0");
+  const ts = `${now.getHours()}${String(now.getMinutes()).padStart(
+    2,
+    "0"
+  )}${String(now.getSeconds()).padStart(2, "0")}_${now.getTime()}`;
+
+  const objectPath = `diary/${y}-${m}-${d}/frame_${ts}.png`;
+
+  const storageRef = ref(storage, objectPath);
+  await uploadBytes(storageRef, blob, { contentType: "image/png" });
+  const url = await getDownloadURL(storageRef);
+  return { url, objectPath };
+}
+
+// QR 표시
+function showQR(url) {
+  const wrap = document.getElementById("qrWrap");
+  const box = document.getElementById("qrcode");
+  const link = document.getElementById("downloadLink");
+  if (!wrap || !box || !link) {
+    console.warn("QR UI elements not found in DOM");
+    return;
+  }
+  box.innerHTML = "";
+  new QRCode(box, {
+    text: url,
+    width: 168,
+    height: 168,
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+  link.href = url;
+  link.textContent = url;
+  wrap.style.display = "block";
+}
+
+// 공개: 버튼/단축키에서 호출
+window.exportFrameToFirebase = async function () {
+  // 1) 프레임만 오프스크린 렌더
+  const g = renderFrameToGraphic();
+
+  // 2) Firebase 업로드
+  const res = await uploadGraphicToFirebase(g);
+  if (!res) {
+    alert("업로드 실패");
+    return;
+  }
+
+  // 3) QR 표시
+  showQR(res.url);
+  console.log("Uploaded to:", res.objectPath);
+};
