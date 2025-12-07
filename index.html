@@ -10,6 +10,8 @@
 
     <!-- QRCode -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Lottie -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
 
     <!-- (선택) 로컬 전용 설정: gitignore에 포함된 config.local.js가 있으면 fallback에 사용 -->
     <script src="./config.local.js"></script>
@@ -39,60 +41,84 @@
       /* QR/버튼 UI */
       #qrWrap {
         position: fixed;
-        right: 16px;
-        bottom: 16px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
         z-index: 9999;
         background: var(--panel);
         border-radius: 12px;
-        padding: 12px;
+        padding: 24px 32px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
         display: none;
-        max-width: 260px;
+        width: min(420px, 90vw);
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 16px;
+      }
+      #qrWrap.is-open {
+        display: flex;
       }
       #qrWrap h4 {
-        margin: 0 0 8px;
+        margin: 0;
         color: var(--ink);
-        font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto,
+        font: 600 16px/1.3 system-ui, -apple-system, Segoe UI, Roboto,
           "Noto Sans KR", sans-serif;
       }
-      #qrWrap .row {
+      #qrWrap .qr-content {
+        width: 100%;
         display: flex;
-        gap: 8px;
+        flex-direction: column;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
+        gap: 16px;
       }
       #qrClose {
         border: 0;
         background: var(--ink);
         color: #fff;
         border-radius: 8px;
-        padding: 6px 10px;
+        padding: 6px 12px;
         cursor: pointer;
+        position: absolute;
+        top: 16px;
+        right: 16px;
       }
       #downloadLink {
         display: inline-block;
-        margin-top: 8px;
+        margin-top: 0;
         font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto,
           "Noto Sans KR", sans-serif;
         color: #0a7cff;
         word-break: break-all;
         text-decoration: none;
       }
-      #exportBtn {
+      #loadingOverlay {
         position: fixed;
-        left: 16px;
-        bottom: 16px;
-        z-index: 9999;
-        border: 0;
-        background: var(--panel);
-        color: var(--ink);
-        border-radius: 12px;
-        padding: 10px 14px;
-        cursor: pointer;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-        font: 600 14px/1 system-ui, -apple-system, Segoe UI, Roboto,
-          "Noto Sans KR", sans-serif;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.35);
+        z-index: 10000;
+        pointer-events: auto;
+      }
+      #loadingOverlay .loading-box {
+        width: min(260px, 40vw);
+        height: min(260px, 40vw);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #loadingLottie {
+        width: 100%;
+        height: 100%;
+      }
+      #confettiCanvas {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        display: none;
+        z-index: 10001;
       }
     </style>
   </head>
@@ -102,16 +128,21 @@
 
     <!-- QR 표시 컨테이너 & 내보내기 버튼 -->
     <div id="qrWrap">
-      <div class="row">
+      <button id="qrClose">닫기</button>
+      <div class="qr-content">
         <h4>QR로 저장 링크 받기</h4>
-        <button id="qrClose">닫기</button>
+        <div id="qrcode"></div>
+        <a id="downloadLink" href="#" target="_blank" rel="noopener"
+          >다운로드 링크 열기</a
+        >
       </div>
-      <div id="qrcode"></div>
-      <a id="downloadLink" href="#" target="_blank" rel="noopener"
-        >다운로드 링크 열기</a
-      >
     </div>
-    <button id="exportBtn">📤 프레임 저장 & QR</button>
+    <div id="loadingOverlay" aria-hidden="true">
+      <div class="loading-box">
+        <div id="loadingLottie"></div>
+      </div>
+    </div>
+    <div id="confettiCanvas"></div>
 
     <!-- Firebase SDK (v12 통일) + 런타임 설정 주입(fetch) + 로컬 fallback -->
     <script type="module">
@@ -153,32 +184,72 @@
 
       initFirebase();
 
+      let loadingOverlayEl = null;
+      let loadingAnimation = null;
+      let confettiContainer = null;
+      let confettiAnimation = null;
+      function initLoadingOverlay() {
+        loadingOverlayEl = document.getElementById("loadingOverlay");
+        const lottieContainer = document.getElementById("loadingLottie");
+        if (lottieContainer && window.lottie) {
+          loadingAnimation = window.lottie.loadAnimation({
+            container: lottieContainer,
+            renderer: "svg",
+            loop: true,
+            autoplay: false,
+            path: "assets/loading.json",
+          });
+        }
+      }
+      window.showLoadingOverlay = function () {
+        if (!loadingOverlayEl) loadingOverlayEl = document.getElementById("loadingOverlay");
+        if (!loadingOverlayEl) return;
+        loadingOverlayEl.style.display = "flex";
+        loadingOverlayEl.setAttribute("aria-hidden", "false");
+        if (loadingAnimation) loadingAnimation.play();
+      };
+      window.hideLoadingOverlay = function () {
+        if (!loadingOverlayEl) loadingOverlayEl = document.getElementById("loadingOverlay");
+        if (!loadingOverlayEl) return;
+        loadingOverlayEl.style.display = "none";
+        loadingOverlayEl.setAttribute("aria-hidden", "true");
+        if (loadingAnimation) loadingAnimation.stop();
+      };
+      window.playConfettiOnce = function () {
+        if (!confettiContainer) confettiContainer = document.getElementById("confettiCanvas");
+        if (!confettiContainer || !window.lottie) return;
+        if (!confettiAnimation) {
+          confettiAnimation = window.lottie.loadAnimation({
+            container: confettiContainer,
+            renderer: "svg",
+            loop: false,
+            autoplay: false,
+            path: "assets/confetti_effect.json",
+          });
+        }
+        confettiAnimation.stop();
+        confettiContainer.style.display = "block";
+        confettiAnimation.removeEventListener("complete", handleConfettiComplete);
+        confettiAnimation.addEventListener("complete", handleConfettiComplete);
+        confettiAnimation.goToAndPlay(0, true);
+      };
+      function handleConfettiComplete() {
+        if (confettiContainer) confettiContainer.style.display = "none";
+        if (confettiAnimation)
+          confettiAnimation.removeEventListener("complete", handleConfettiComplete);
+      }
+
       // UI 핸들러 연결 (DOMContentLoaded 이후)
       document.addEventListener("DOMContentLoaded", () => {
         const qrWrap = document.getElementById("qrWrap");
         const qrClose = document.getElementById("qrClose");
-        const exportBtn = document.getElementById("exportBtn");
 
-        if (qrClose)
+        if (qrClose && qrWrap)
           qrClose.onclick = () => {
-            qrWrap.style.display = "none";
+            qrWrap.classList.remove("is-open");
           };
-
-        if (exportBtn) {
-          exportBtn.onclick = () => {
-            if (!window.__fb?.storage) {
-              alert(
-                "Firebase가 아직 초기화되지 않았어요. 잠시 후 다시 시도해주세요."
-              );
-              return;
-            }
-            if (typeof window.exportFrameToFirebase !== "function") {
-              alert("스케치 준비 중입니다.");
-              return;
-            }
-            window.exportFrameToFirebase();
-          };
-        }
+        initLoadingOverlay();
+        confettiContainer = document.getElementById("confettiCanvas");
       });
     </script>
 
