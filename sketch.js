@@ -56,6 +56,8 @@ let penImg = null;
 let eraserImg = null;
 let cameraBg = null;
 let shutterAudio = null;
+let backgroundMusic = null;
+let backgroundMusicStarted = false;
 let photoFlowerBorderImg = null;
 let photoChristmasBorderImg = null;
 
@@ -1001,6 +1003,8 @@ function setup() {
   });
   cam.hide();
   prepareShutterAudio();
+  prepareBackgroundMusic();
+  ensureBackgroundMusicPlaying();
 }
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
@@ -1755,6 +1759,7 @@ function drawButton(r, label, active = false) {
     Input
 ======================== */
 function mousePressed() {
+  ensureBackgroundMusicPlaying();
   // 우측 프레임 메뉴
   const { x, y, w, h } = UI.frameMenu;
   if (inRect(mouseX, mouseY, { x, y, w, h })) {
@@ -2329,6 +2334,34 @@ function prepareShutterAudio() {
     shutterAudio = new Audio("assets/shutter_sound.mp3");
     shutterAudio.preload = "auto";
     shutterAudio.load();
+  }
+}
+function ensureBackgroundMusicPlaying() {
+  try {
+    prepareBackgroundMusic();
+    if (!backgroundMusic) return;
+    if (!backgroundMusicStarted || backgroundMusic.paused) {
+      const playPromise = backgroundMusic.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise
+          .then(() => {
+            backgroundMusicStarted = true;
+          })
+          .catch(() => {});
+      } else {
+        backgroundMusicStarted = true;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to play background music", err);
+  }
+}
+function prepareBackgroundMusic() {
+  if (!backgroundMusic) {
+    backgroundMusic = new Audio("assets/background_music.mp3");
+    backgroundMusic.loop = true;
+    backgroundMusic.preload = "auto";
+    backgroundMusic.load();
   }
 }
 function setCursorSmart() {
