@@ -1,0 +1,3 @@
+{
+  "routes": [{ "src": "/config.json", "dest": "/api/config.js" }]
+}
