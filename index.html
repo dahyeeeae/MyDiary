@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Diary</title>
+    <link rel="icon" type="image/png" href="assets/icon_pen.png" />
 
     <!-- p5.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
@@ -202,21 +203,24 @@
         }
       }
       window.showLoadingOverlay = function () {
-        if (!loadingOverlayEl) loadingOverlayEl = document.getElementById("loadingOverlay");
+        if (!loadingOverlayEl)
+          loadingOverlayEl = document.getElementById("loadingOverlay");
         if (!loadingOverlayEl) return;
         loadingOverlayEl.style.display = "flex";
         loadingOverlayEl.setAttribute("aria-hidden", "false");
         if (loadingAnimation) loadingAnimation.play();
       };
       window.hideLoadingOverlay = function () {
-        if (!loadingOverlayEl) loadingOverlayEl = document.getElementById("loadingOverlay");
+        if (!loadingOverlayEl)
+          loadingOverlayEl = document.getElementById("loadingOverlay");
         if (!loadingOverlayEl) return;
         loadingOverlayEl.style.display = "none";
         loadingOverlayEl.setAttribute("aria-hidden", "true");
         if (loadingAnimation) loadingAnimation.stop();
       };
       window.playConfettiOnce = function () {
-        if (!confettiContainer) confettiContainer = document.getElementById("confettiCanvas");
+        if (!confettiContainer)
+          confettiContainer = document.getElementById("confettiCanvas");
         if (!confettiContainer || !window.lottie) return;
         if (!confettiAnimation) {
           confettiAnimation = window.lottie.loadAnimation({
@@ -229,14 +233,20 @@
         }
         confettiAnimation.stop();
         confettiContainer.style.display = "block";
-        confettiAnimation.removeEventListener("complete", handleConfettiComplete);
+        confettiAnimation.removeEventListener(
+          "complete",
+          handleConfettiComplete
+        );
         confettiAnimation.addEventListener("complete", handleConfettiComplete);
         confettiAnimation.goToAndPlay(0, true);
       };
       function handleConfettiComplete() {
         if (confettiContainer) confettiContainer.style.display = "none";
         if (confettiAnimation)
-          confettiAnimation.removeEventListener("complete", handleConfettiComplete);
+          confettiAnimation.removeEventListener(
+            "complete",
+            handleConfettiComplete
+          );
       }
 
       // UI 핸들러 연결 (DOMContentLoaded 이후)

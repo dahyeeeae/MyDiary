@@ -58,6 +58,7 @@ let cameraBg = null;
 let shutterAudio = null;
 let backgroundMusic = null;
 let backgroundMusicStarted = false;
+const BACKGROUND_MUSIC_VOLUME = 0.8;
 let photoFlowerBorderImg = null;
 let photoChristmasBorderImg = null;
 
@@ -990,6 +991,8 @@ function preload() {
   }
   photoFlowerBorderImg = loadImage("assets/photo_edit/border_flower.png");
   photoChristmasBorderImg = loadImage("assets/photo_edit/border_christmas.png");
+  prepareBackgroundMusic();
+  ensureBackgroundMusicPlaying();
 }
 
 function setup() {
@@ -2341,15 +2344,24 @@ function ensureBackgroundMusicPlaying() {
     prepareBackgroundMusic();
     if (!backgroundMusic) return;
     if (!backgroundMusicStarted || backgroundMusic.paused) {
+      backgroundMusic.volume = BACKGROUND_MUSIC_VOLUME;
+      backgroundMusic.muted = true;
+      const finalizeStart = () => {
+        backgroundMusicStarted = true;
+        setTimeout(() => {
+          backgroundMusic.muted = false;
+          backgroundMusic.volume = BACKGROUND_MUSIC_VOLUME;
+        }, 50);
+      };
       const playPromise = backgroundMusic.play();
       if (playPromise && typeof playPromise.then === "function") {
         playPromise
           .then(() => {
-            backgroundMusicStarted = true;
+            finalizeStart();
           })
           .catch(() => {});
       } else {
-        backgroundMusicStarted = true;
+        finalizeStart();
       }
     }
   } catch (err) {
@@ -2361,8 +2373,20 @@ function prepareBackgroundMusic() {
     backgroundMusic = new Audio("assets/background_music.mp3");
     backgroundMusic.loop = true;
     backgroundMusic.preload = "auto";
+    backgroundMusic.autoplay = true;
+    backgroundMusic.playsInline = true;
+    backgroundMusic.volume = BACKGROUND_MUSIC_VOLUME;
     backgroundMusic.load();
   }
+}
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "load",
+    () => {
+      ensureBackgroundMusicPlaying();
+    },
+    { once: true }
+  );
 }
 function setCursorSmart() {
   let cursorSet = false;
