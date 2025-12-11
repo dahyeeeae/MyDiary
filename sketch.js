@@ -48,7 +48,7 @@ const PHOTO_BORDER_ICON_PATHS = {
   circle: "assets/photo_edit/borderBtn_circle.png",
   square: "assets/photo_edit/borderBtn_square.png",
   christmas: "assets/photo_edit/borderBtn_christmas.png",
-  flower: "assets/photo_edit/borderBtn_flower.png",
+  flower: "assets/photo_edit/borderBtn_tape.png",
 };
 
 // 이미지 버튼용 전역
@@ -946,7 +946,7 @@ class DraggableItem {
     if (style === "christmas") {
       if (!photoChristmasBorderImg) return;
       ctx.push();
-      const scale = 1.2;
+      const scale = 1.4;
       const drawW = this.w * scale;
       const drawH = this.h * scale;
       ctx.image(photoChristmasBorderImg, -drawW / 2, -drawH / 2, drawW, drawH);
@@ -956,7 +956,7 @@ class DraggableItem {
     if (style === "flower") {
       if (!photoFlowerBorderImg) return;
       ctx.push();
-      const scale = 1.4;
+      const scale = 1.38;
       const drawW = this.w * scale;
       const drawH = this.h * scale;
       ctx.image(photoFlowerBorderImg, -drawW / 2, -drawH / 2, drawW, drawH);
@@ -989,7 +989,7 @@ function preload() {
       photoBorderIcons[opt.key] = loadImage(path);
     }
   }
-  photoFlowerBorderImg = loadImage("assets/photo_edit/border_flower.png");
+  photoFlowerBorderImg = loadImage("assets/photo_edit/border_tape.png");
   photoChristmasBorderImg = loadImage("assets/photo_edit/border_christmas.png");
   prepareBackgroundMusic();
   ensureBackgroundMusicPlaying();
