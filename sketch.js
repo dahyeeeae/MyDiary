@@ -48,7 +48,7 @@ const PHOTO_BORDER_ICON_PATHS = {
   circle: "assets/photo_edit/borderBtn_circle.png",
   square: "assets/photo_edit/borderBtn_square.png",
   christmas: "assets/photo_edit/borderBtn_christmas.png",
-  flower: "assets/photo_edit/borderBtn_tape.png",
+  flower: "assets/photo_edit/borderBtn_tape2.png",
 };
 
 // 이미지 버튼용 전역
