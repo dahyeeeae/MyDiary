@@ -19,6 +19,7 @@ const UI = {
   saveButton: null, // (우측 하단)
   diaryFrameRect: null, // (중앙)
   resetButton: null,
+  undoButton: null,
   photoEditorPanel: null,
 };
 
@@ -61,6 +62,7 @@ let backgroundMusicStarted = false;
 const BACKGROUND_MUSIC_VOLUME = 0.8;
 let photoFlowerBorderImg = null;
 let photoChristmasBorderImg = null;
+let undoIcon = null;
 
 // 전역 버튼 rect 저장용
 let penBtnRect = null;
@@ -72,6 +74,7 @@ let photoBorderOptionRects = [];
 let photoBorderIcons = {};
 
 let myFont;
+let undoStack = [];
 
 /* ===== Frames & Stickers ===== */
 const frameDefs = [
@@ -96,9 +99,9 @@ const frameDefs = [
     src: "assets/frames/frame_diary2.png",
   },
 ];
-const FRAME_MENU_GRID = { cols: 2, rows: 2, gap: 8 };
-const FRAME_BTN_HEIGHT_SCALE = 0.96;
-const FRAME_MENU_TITLE_LINE = 20;
+const FRAME_MENU_GRID = { cols: 2, rows: 2, gap: 6 };
+const FRAME_BTN_HEIGHT_SCALE = 0.95;
+const FRAME_MENU_TITLE_LINE = 24;
 const PANEL_BG_ALPHA = Math.round(255 * 0.8);
 const PANEL_BG_COLOR = [255, 254, 242, PANEL_BG_ALPHA];
 const PANEL_CORNER_RADIUS = 12;
@@ -106,14 +109,17 @@ const PANEL_TITLE_COLOR = "#7A4100";
 const FRAME_MENU_TITLE = "> 속지를 골라보세요";
 const GUIDELINE_TITLE = "> 다이어리 활용법";
 const GUIDELINE_TEXT =
-  "1. 속지를 선택 후 스티커, 펜툴을 활용해 나만의 다이어리를 꾸며보세요\n 2. 키보드에서 P 키를 눌러 카메라로 촬영 후 다이어리에서 꾸며보세요\n 3. '저장하기'를 눌러 로딩된 QR 코드를 스캔하면 사진을 저장할 수 있어요";
+  "1. 속지를 선택 후 스티커, 펜툴을 활용해 나만의 다이어리를 꾸며보세요\n 2. 드래그를 통해 스티커를 가져오고, 크기 조절과 회전 기능으로 자유롭게 상상력을 펼치세요\n 3. '저장하기'를 눌러 로딩된 QR 코드를 스캔하면 사진을 저장할 수 있어요";
 const RIGHT_PANEL_TITLE_FONT_SIZE = 16;
-const RIGHT_PANEL_BODY_FONT_SIZE = 11;
-const RIGHT_PANEL_BUTTON_FONT_SIZE = 14;
-const GUIDELINE_TEXT_LEADING = 22;
+const RIGHT_PANEL_BODY_FONT_SIZE = 10;
+const FRAME_MENU_BUTTON_FONT_SIZE = 14;
+const SAVE_BUTTON_FONT_SIZE = 24;
+const UNDO_STACK_LIMIT = 20;
+const GUIDELINE_TEXT_LEADING = 24;
 const GUIDELINE_TITLE_FONT_SIZE = RIGHT_PANEL_TITLE_FONT_SIZE;
 const GUIDELINE_BODY_LINE_HEIGHT = GUIDELINE_TEXT_LEADING;
-const GUIDELINE_PARAGRAPH_GAP = 20;
+const GUIDELINE_PARAGRAPH_GAP = 16;
+const GUIDELINE_EXTRA_HEIGHT = 10;
 const GUIDELINE_TITLE_LINE = FRAME_MENU_TITLE_LINE;
 const PARAGRAPH_GAP = 10;
 const BASE_LAYOUT = {
@@ -131,8 +137,8 @@ const BASE_LAYOUT = {
   ),
   CENTER_HEIGHT: 920,
   CENTER_ASPECT: 20 / 13,
-  FRAME_MENU_HEIGHT: 210,
-  WEBCAM_HEIGHT: 340,
+  FRAME_MENU_HEIGHT: 170,
+  WEBCAM_HEIGHT: 300,
   TOOL_HEIGHT: 270,
   FRAME_PAD: 16,
   GUIDELINE_PAD_X: 20,
@@ -140,9 +146,21 @@ const BASE_LAYOUT = {
   GUIDELINE_TITLE_GAP: GUIDELINE_PARAGRAPH_GAP,
   PARAGRAPH_GAP: GUIDELINE_PARAGRAPH_GAP,
   VERTICAL_MARGIN: 40,
-  SAVE_BUTTON_HEIGHT: 56,
+  SAVE_BUTTON_HEIGHT: 68,
 };
 const DEFAULT_FRAME_KEY = "ribbon";
+const DIARY_TITLE_TEXT = "나의 그림일기";
+const DIARY_TITLE_MIN_SIZE = 34;
+const DIARY_TITLE_MAX_SIZE = 68;
+const DIARY_TITLE_COLOR = "#7A4100";
+const DIARY_FRAME_Y_OFFSET = 24;
+const CAMERA_BG_OFFSET_Y = 18;
+const WEBCAM_HINT_TEXT = "P키를 눌러 촬영하세요";
+const WEBCAM_VIEW_OFFSET_Y = -10;
+const WEBCAM_HINT_X_OFFSET = -60;
+const WEBCAM_VIEW_WIDTH_RATIO = 0.85;
+const WEBCAM_VIEW_HEIGHT_RATIO = 0.47;
+const WEBCAM_HINT_Y_OFFSET = -4;
 
 const stickerDefs = [
   {
@@ -188,8 +206,8 @@ let drawingBelow = null;
 let drawingAbove = null;
 let currentStrokeLayer = null;
 let drawTool = "pen";
-let penSize = 9;
-let eraserSize = 9;
+let penSize = 7;
+let eraserSize = 7;
 let brushColor = "#7A4100";
 const palette = ["#FF8A9B", "#7A4100", "#6BC743", "#79BADB"];
 
@@ -198,7 +216,7 @@ let cam,
   webcamReady = false;
 const PHOTO_COUNTDOWN_SECONDS = 3;
 const CAMERA_FLASH_DURATION = 0.6;
-const PHOTO_CAPTURE_DELAY = 1000;
+const PHOTO_CAPTURE_DELAY = 300; // triggers snapshot 0.3s sooner while keeping flash timing
 let photoCountdown = null;
 let webcamFlashTime = 0;
 
@@ -279,6 +297,7 @@ function updateLayout() {
   const centerH = BASE_LAYOUT.CENTER_HEIGHT * scale;
   const centerW = centerH / BASE_LAYOUT.CENTER_ASPECT;
   const framePad = BASE_LAYOUT.FRAME_PAD * scale;
+  const diaryFrameOffsetY = DIARY_FRAME_Y_OFFSET * scale;
 
   const stickerCell = STICKER_GRID.cell * scale;
   const stickerPadX = STICKER_GRID.padX * scale;
@@ -301,7 +320,8 @@ function updateLayout() {
   const paragraphGap = BASE_LAYOUT.PARAGRAPH_GAP * scale;
   const bodyLineHeight = GUIDELINE_TEXT_LEADING * fontScale;
   const panelFontSize = RIGHT_PANEL_TITLE_FONT_SIZE * fontScale;
-  const buttonFontSize = RIGHT_PANEL_BUTTON_FONT_SIZE * fontScale;
+  const frameMenuButtonFontSize = FRAME_MENU_BUTTON_FONT_SIZE * fontScale;
+  const saveButtonFontSize = SAVE_BUTTON_FONT_SIZE * fontScale;
 
   const guidelineTextH = measureGuidelineTextHeight(
     GUIDELINE_TEXT,
@@ -311,8 +331,9 @@ function updateLayout() {
     paragraphGap,
     panelFontSize
   );
-  const guidelineH =
+  let guidelineH =
     guidePadY + titleLine + titleGapBelow + guidelineTextH + guidePadY;
+  guidelineH += GUIDELINE_EXTRA_HEIGHT * scale;
 
   const leftColH = stickerH + gapStack + toolH;
   const saveButtonH = BASE_LAYOUT.SAVE_BUTTON_HEIGHT * scale;
@@ -332,7 +353,7 @@ function updateLayout() {
 
   const leftTop = contentTop + (contentH - leftColH) / 2;
   const rightTop = contentTop + (contentH - rightColH) / 2;
-  const midTop = contentTop + (contentH - centerH) / 2;
+  const midTop = contentTop + (contentH - centerH) / 2 + diaryFrameOffsetY;
 
   let totalWidthWithMargins =
     marginX * 2 + leftColW + rightColW + centerW + gapCol * 2;
@@ -393,8 +414,19 @@ function updateLayout() {
       h: desiredReset,
       fontSize: desiredReset * 0.25,
     };
+    const undoGap = Math.max(8 * scale, 4);
+    let undoY = resetY - desiredReset - undoGap;
+    const minUndoY = UI.toolPanel.y + offsetY;
+    if (undoY < minUndoY) undoY = minUndoY;
+    UI.undoButton = {
+      x: resetX,
+      y: undoY,
+      w: desiredReset,
+      h: desiredReset,
+    };
   } else {
     UI.resetButton = null;
+    UI.undoButton = null;
   }
 
   UI.frameMenu = {
@@ -405,7 +437,7 @@ function updateLayout() {
     padX: 20 * scale,
     padY: 20 * scale,
     titleFontSize: panelFontSize,
-    buttonFontSize,
+    buttonFontSize: frameMenuButtonFontSize,
   };
   UI.webcamPanel = {
     x: rightX,
@@ -431,7 +463,7 @@ function updateLayout() {
     y: UI.guidelinePanel.y + UI.guidelinePanel.h + gapStack,
     w: rightColW,
     h: saveButtonH,
-    fontSize: buttonFontSize,
+    fontSize: saveButtonFontSize,
   };
 
   UI.diaryFrameRect = {
@@ -533,17 +565,33 @@ function needsResizeCursorSwap(a) {
   if (d < 0) d += 180;
   return d >= 45 && d < 135;
 }
+function getDraggableHitOrderIndices() {
+  const stickerIdx = [];
+  const photoIdx = [];
+  for (let i = 0; i < draggables.length; i++) {
+    if (draggables[i].type === "photo") photoIdx.push(i);
+    else stickerIdx.push(i);
+  }
+  const ordered = [];
+  for (let i = stickerIdx.length - 1; i >= 0; i--) ordered.push(stickerIdx[i]);
+  for (let i = photoIdx.length - 1; i >= 0; i--) ordered.push(photoIdx[i]);
+  return ordered;
+}
 function topmostItemAt(mx, my) {
-  for (let i = draggables.length - 1; i >= 0; i--) {
-    if (draggables[i].contains(mx, my)) return i;
+  const order = getDraggableHitOrderIndices();
+  for (const idx of order) {
+    if (draggables[idx].contains(mx, my)) return idx;
   }
   return -1;
 }
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
-function clampDraggableToFrame(item) {
-  if (!UI.diaryFrameRect) return;
+const MIN_DRAGGABLE_PIXEL = 60;
+const MIN_DRAGGABLE_SCALE = 0.35;
+const MAX_DRAGGABLE_SCALE = 5.0;
+function getDiaryInnerRect() {
+  if (!UI.diaryFrameRect) return null;
   const f = UI.diaryFrameRect;
   const innerX = f.x + f.pad;
   const innerY = f.y + f.pad;
@@ -555,14 +603,56 @@ function clampDraggableToFrame(item) {
     drawingBelow && drawingBelow.height
       ? drawingBelow.height
       : Math.max(0, f.h - f.pad * 2);
-  if (innerW <= 0 || innerH <= 0) return;
+  if (innerW <= 0 || innerH <= 0) return null;
+  return { x: innerX, y: innerY, w: innerW, h: innerH };
+}
+function computePhotoMaxScale(item, innerRect = null) {
+  if (!item || item.type !== "photo") return Infinity;
+  const inner = innerRect || getDiaryInnerRect();
+  if (!inner) return Infinity;
+  if (item.w <= 0 || item.h <= 0) return Infinity;
+  const widthScale = inner.w / item.w;
+  const heightScale = inner.h / item.h;
+  const maxScale = Math.min(widthScale, heightScale);
+  return maxScale > 0 ? maxScale : Infinity;
+}
+function getDraggableScaleLimits(item, innerRect = null) {
+  if (!item) {
+    return { minScale: MIN_DRAGGABLE_SCALE, maxScale: MAX_DRAGGABLE_SCALE };
+  }
+  const minCandidates = [MIN_DRAGGABLE_SCALE];
+  if (item.w >= MIN_DRAGGABLE_PIXEL && item.w > 0) {
+    minCandidates.push(MIN_DRAGGABLE_PIXEL / item.w);
+  }
+  if (item.h >= MIN_DRAGGABLE_PIXEL && item.h > 0) {
+    minCandidates.push(MIN_DRAGGABLE_PIXEL / item.h);
+  }
+  let minScale = Math.max(...minCandidates);
+  let maxScale = MAX_DRAGGABLE_SCALE;
+  if (item.type === "photo") {
+    const photoMax = computePhotoMaxScale(item, innerRect);
+    if (Number.isFinite(photoMax) && photoMax > 0) {
+      maxScale = Math.min(maxScale, photoMax);
+    }
+  }
+  if (minScale > maxScale) minScale = maxScale;
+  return { minScale, maxScale };
+}
+function normalizeDraggableScale(item, innerRect = null) {
+  const { minScale, maxScale } = getDraggableScaleLimits(item, innerRect);
+  item.scale = clamp(item.scale, minScale, maxScale);
+}
+function clampDraggableToFrame(item) {
+  const inner = getDiaryInnerRect();
+  if (!inner) return;
+  normalizeDraggableScale(item, inner);
   const halfDiag = (Math.max(item.w, item.h) * item.scale) / 2;
-  const effHalfX = Math.min(halfDiag, innerW / 2);
-  const effHalfY = Math.min(halfDiag, innerH / 2);
-  const minCX = innerX + effHalfX;
-  const maxCX = innerX + innerW - effHalfX;
-  const minCY = innerY + effHalfY;
-  const maxCY = innerY + innerH - effHalfY;
+  const effHalfX = Math.min(halfDiag, inner.w / 2);
+  const effHalfY = Math.min(halfDiag, inner.h / 2);
+  const minCX = inner.x + effHalfX;
+  const maxCX = inner.x + inner.w - effHalfX;
+  const minCY = inner.y + effHalfY;
+  const maxCY = inner.y + inner.h - effHalfY;
   const centerX = clamp(item.x + item.w / 2, minCX, maxCX);
   const centerY = clamp(item.y + item.h / 2, minCY, maxCY);
   item.x = centerX - item.w / 2;
@@ -863,7 +953,7 @@ class DraggableItem {
       const dc = ctx.drawingContext;
       if (dc && dc.save) {
         const clipSize = Math.min(this.w, this.h);
-        const radius = style === "square" ? clipSize * 0.1 : clipSize / 2;
+        const radius = style === "square" ? clipSize * 0.18 : clipSize / 2;
         dc.save();
         dc.beginPath();
         if (style === "circle") {
@@ -983,6 +1073,7 @@ function preload() {
   penImg = loadImage("assets/pen2.png");
   eraserImg = loadImage("assets/eraser2.png");
   cameraBg = loadImage("assets/camera2.png");
+  undoIcon = loadImage("assets/back.png");
   for (const opt of PHOTO_BORDER_OPTIONS) {
     const path = PHOTO_BORDER_ICON_PATHS[opt.key];
     if (path) {
@@ -1067,6 +1158,7 @@ function draw() {
   // 패널
   drawStickerPanel();
   drawToolPanel();
+  drawUndoButton();
   drawResetButton();
   drawPhotoEditorPanel();
   drawFrameMenu();
@@ -1074,6 +1166,7 @@ function draw() {
   drawGuidelinePanel();
   drawSaveButton();
 
+  drawDiaryTitle();
   handleDrawing();
 
   if (spawnDrag) {
@@ -1088,6 +1181,24 @@ function draw() {
     pop();
   }
   setCursorSmart();
+}
+
+function drawDiaryTitle() {
+  if (!UI.diaryFrameRect) return;
+  const { x, y, w } = UI.diaryFrameRect;
+  const centerX = x + w / 2;
+  const fontSize = clamp(w * 0.055, DIARY_TITLE_MIN_SIZE, DIARY_TITLE_MAX_SIZE);
+  const baseline = Math.max(fontSize * 0.8, y - fontSize * 0.35);
+
+  push();
+  textAlign(CENTER, BOTTOM);
+  textFont(myFont);
+  textSize(fontSize);
+  textStyle(BOLD);
+  fill(DIARY_TITLE_COLOR);
+  noStroke();
+  text(DIARY_TITLE_TEXT, centerX, baseline);
+  pop();
 }
 
 /* ========================
@@ -1145,7 +1256,7 @@ function drawFrameMenu() {
     padX = 20,
     padY = 20,
     titleFontSize = RIGHT_PANEL_TITLE_FONT_SIZE,
-    buttonFontSize = RIGHT_PANEL_BUTTON_FONT_SIZE,
+    buttonFontSize = FRAME_MENU_BUTTON_FONT_SIZE,
     titleGap = FRAME_MENU_TITLE_LINE * 0.25,
   } = UI.frameMenu;
   drawPanel(
@@ -1252,6 +1363,15 @@ function drawWebcamPanel() {
   const innerY = y + framePad;
   const innerW = w - framePad * 2;
   const innerH = h - framePad * 2;
+  let hintHeight = Math.max(32, RIGHT_PANEL_BODY_FONT_SIZE * 2.4);
+  hintHeight = Math.min(hintHeight, innerH * 0.4);
+  let cameraInnerH = innerH - hintHeight;
+  cameraInnerH = Math.max(80, cameraInnerH);
+  if (cameraInnerH > innerH) {
+    cameraInnerH = innerH;
+  }
+  hintHeight = Math.max(0, innerH - cameraInnerH);
+  const cameraBgOffset = Math.min(CAMERA_BG_OFFSET_Y, cameraInnerH * 0.25);
 
   if (!UI.webcamRects) UI.webcamRects = {};
   const R = UI.webcamRects;
@@ -1260,17 +1380,17 @@ function drawWebcamPanel() {
   translate(innerX, innerY);
 
   // 1) camera.png: cover + 오버스케일
-  let bgRect = { x: 0, y: 0, w: innerW, h: innerH };
+  let bgRect = { x: 0, y: cameraBgOffset, w: innerW, h: cameraInnerH };
   if (cameraBg) {
     const ir = cameraBg.width / cameraBg.height;
-    const boxR = innerW / innerH;
+    const boxR = innerW / cameraInnerH;
     let dw, dh;
     if (boxR > ir) {
       dw = innerW;
       dh = innerW / ir;
     } else {
-      dh = innerH;
-      dw = innerH * ir;
+      dh = cameraInnerH;
+      dw = cameraInnerH * ir;
     }
 
     const OVER = 1.3; // 배경을 더 크게
@@ -1278,31 +1398,31 @@ function drawWebcamPanel() {
     dh *= OVER;
 
     const bgX = (innerW - dw) / 2;
-    const bgY = (innerH - dh) / 2;
+    const bgY = (cameraInnerH - dh) / 2 + cameraBgOffset;
     image(cameraBg, bgX, bgY, dw, dh);
     bgRect = { x: bgX, y: bgY, w: dw, h: dh };
   } else {
     push();
     noStroke();
     fill(255, 240, 220, 180);
-    rect(0, 0, innerW, innerH, 12);
+    rect(0, cameraBgOffset, innerW, cameraInnerH, 12);
     pop();
+    bgRect = { x: 0, y: cameraBgOffset, w: innerW, h: cameraInnerH };
   }
   R.bgRect = { ...bgRect, absX: innerX + bgRect.x, absY: innerY + bgRect.y };
 
   // 2) 웹캠: 배경 대비 1/1.8 배(= 약 0.556)로 고정, 중앙 정렬
-  const webcamOffsetY = 4; // 필요시 아래로 내리기
-  const VIEW_REL = 1 / 1.8;
-
+  const webcamOffsetY = WEBCAM_VIEW_OFFSET_Y;
   // 배경 사각형의 크기에 대한 상대 크기
-  let viewW = Math.max(20, bgRect.w * VIEW_REL);
-  let viewH = Math.max(20, bgRect.h * VIEW_REL);
+  let viewW = Math.max(20, bgRect.w * WEBCAM_VIEW_WIDTH_RATIO);
+  let viewH = Math.max(20, bgRect.h * WEBCAM_VIEW_HEIGHT_RATIO);
 
   // 중앙 정렬 + 약간 아래로
   const vx = bgRect.x + (bgRect.w - viewW) / 2;
   const vy = bgRect.y + (bgRect.h - viewH) / 2 + webcamOffsetY;
 
   // 3) 카메라 영상: viewRect 안에 contain
+  let webcamContentRect = { x: vx, y: vy, w: viewW, h: viewH };
   if (webcamReady) {
     const camIR = (cam.width || 4) / (cam.height || 3);
     const boxR = viewW / viewH;
@@ -1322,6 +1442,7 @@ function drawWebcamPanel() {
     scale(-1, 1);
     image(cam, 0, 0, dw2, dh2);
     pop();
+    webcamContentRect = { x: destX, y: destY, w: dw2, h: dh2 };
   } else {
     push();
     noStroke();
@@ -1371,9 +1492,30 @@ function drawWebcamPanel() {
       push();
       noStroke();
       fill(255, flashAlpha);
-      rect(vx, vy, viewW, viewH);
+      rect(
+        webcamContentRect.x,
+        webcamContentRect.y,
+        webcamContentRect.w,
+        webcamContentRect.h
+      );
       pop();
     }
+  }
+  if (hintHeight > 0) {
+    const hintY = cameraInnerH;
+    const fontSize = Math.min(
+      RIGHT_PANEL_BODY_FONT_SIZE * 1.3,
+      hintHeight * 0.45
+    );
+    const hintX = innerW / 2 + WEBCAM_HINT_X_OFFSET;
+    const hintYPos = hintY + hintHeight / 2 + WEBCAM_HINT_Y_OFFSET;
+    push();
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(fontSize);
+    fill("#FFFFFF");
+    text(WEBCAM_HINT_TEXT, hintX, hintYPos);
+    pop();
   }
   pop();
 }
@@ -1430,7 +1572,7 @@ function drawGuidelinePanel() {
 function drawSaveButton() {
   const btn = UI.saveButton;
   if (!btn) return;
-  const { x, y, w, h, fontSize = RIGHT_PANEL_BUTTON_FONT_SIZE } = btn;
+  const { x, y, w, h, fontSize = SAVE_BUTTON_FONT_SIZE } = btn;
   const hovered = isMouseOverSaveButton(mouseX, mouseY);
   const pressed = hovered && mouseIsPressed;
   let baseColor = "#FDE7C7";
@@ -1462,7 +1604,7 @@ function drawToolPanel() {
   const innerW = w - padX * 2;
   const innerH = h - padY * 2;
 
-  const sizes = [6, 9, 12, 16];
+  const sizes = [4, 7, 10, 13];
   const sizeBoxBase = 26;
   const sizeSpacingBase = 12;
   const colorSizeBase = 26;
@@ -1708,7 +1850,7 @@ function drawPhotoEditorPanel() {
         text(
           opt.label,
           rectDef.x + rectDef.w / 2,
-          rectDef.y + rectDef.h / 2 + RIGHT_PANEL_BUTTON_FONT_SIZE * 0.05
+          rectDef.y + rectDef.h / 2 + FRAME_MENU_BUTTON_FONT_SIZE * 0.05
         );
       }
       photoBorderOptionRects.push({
@@ -1719,6 +1861,52 @@ function drawPhotoEditorPanel() {
       btnY += buttonSize + gapY;
     });
   });
+  pop();
+}
+function drawUndoButton() {
+  const btn = UI.undoButton;
+  if (!btn) return;
+  const { x, y, w, h } = btn;
+  const disabled = undoStack.length === 0;
+  const hovered = !disabled && isMouseOverUndoButton(mouseX, mouseY);
+  const pressed = hovered && mouseIsPressed;
+  let baseColor = "#FDE7C7";
+  if (disabled) {
+    baseColor = "#E5E7EB";
+  } else if (pressed) {
+    baseColor = "#7A4100";
+  } else if (hovered) {
+    baseColor = "#FFD859";
+  }
+  push();
+  noStroke();
+  fill(baseColor);
+  rect(x, y, w, h, 12);
+  if (undoIcon) {
+    const pad = Math.max(w * 0.18, 8);
+    const maxW = w - pad * 2;
+    const maxH = h - pad * 2;
+    const ir = undoIcon.width / Math.max(1, undoIcon.height);
+    const rr = maxW / maxH;
+    let dw = maxW;
+    let dh = maxH;
+    if (rr > ir) {
+      dh = maxH;
+      dw = dh * ir;
+    } else {
+      dw = maxW;
+      dh = dw / ir;
+    }
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    if (disabled) {
+      tint(150, 150, 150, 140);
+    } else {
+      noTint();
+    }
+    image(undoIcon, cx - dw / 2, cy - dh / 2, dw, dh);
+    noTint();
+  }
   pop();
 }
 function drawResetButton() {
@@ -1771,7 +1959,10 @@ function mousePressed() {
       : getFrameButtonRects();
     for (const { rect, index } of candidates) {
       if (inRect(mouseX, mouseY, rect)) {
-        currentFrameIdx = index;
+        if (currentFrameIdx !== index) {
+          pushUndoState();
+          currentFrameIdx = index;
+        }
         return;
       }
     }
@@ -1793,6 +1984,7 @@ function mousePressed() {
   }
 
   if (UI.resetButton && inRect(mouseX, mouseY, UI.resetButton)) {
+    pushUndoState();
     resetWorkspace();
     return;
   }
@@ -1807,6 +1999,10 @@ function mousePressed() {
     handleSaveAction();
     return;
   }
+  if (UI.undoButton && inRect(mouseX, mouseY, UI.undoButton)) {
+    undoLastAction();
+    return;
+  }
 
   // 선택/드로잉 초기화
   blockDrawThisPress = false;
@@ -1814,17 +2010,20 @@ function mousePressed() {
   currentStrokeLayer = null;
 
   // 선택된 스티커의 핸들/삭제
-  for (let i = draggables.length - 1; i >= 0; i--) {
+  const hitOrder = getDraggableHitOrderIndices();
+  for (const i of hitOrder) {
     const sel = draggables[i];
     const hit = sel.hitWhat(mouseX, mouseY);
     if (hit) {
       if (hit.type === "delete") {
+        pushUndoState();
         draggables.splice(i, 1);
         draggingIdx = -1;
         activeMode = null;
         blockDrawThisPress = true;
         return;
       }
+      pushUndoState();
       draggables.forEach((d) => (d.selected = false));
       sel.selected = true;
       draggingIdx = i;
@@ -1840,9 +2039,10 @@ function mousePressed() {
   }
 
   // 스티커 본체 선택/이동 (handles 외 영역)
-  for (let i = draggables.length - 1; i >= 0; i--) {
+  for (const i of hitOrder) {
     const sel = draggables[i];
     if (sel.contains(mouseX, mouseY)) {
+      pushUndoState();
       draggables.forEach((d, idx) => {
         d.selected = idx === i;
       });
@@ -1881,6 +2081,7 @@ function mousePressed() {
     mouseY >= gy &&
     mouseY <= gy + drawingBelow.height;
   if (inside && (drawTool === "pen" || drawTool === "eraser")) {
+    pushUndoState();
     drawingThisStroke = true;
     currentStrokeLayer = "below";
     return;
@@ -1906,7 +2107,8 @@ function mouseDragged() {
       const d0 = Math.hypot(startMouse.x - cx, startMouse.y - cy),
         d1 = Math.hypot(mouseX - cx, mouseY - cy);
       let s = startScale * (d1 / Math.max(30, d0));
-      item.scale = constrain(s, 0.2, 5.0);
+      const { minScale, maxScale } = getDraggableScaleLimits(item);
+      item.scale = clamp(s, minScale, maxScale);
       clampDraggableToFrame(item);
       return;
     }
@@ -1929,6 +2131,7 @@ function mouseReleased() {
         img = stickers[key];
       const nx = mouseX - spawnDrag.w / 2,
         ny = mouseY - spawnDrag.h / 2;
+      pushUndoState();
       const newItem = new DraggableItem({
         type: "sticker",
         key,
@@ -2066,7 +2269,12 @@ function handlePhotoPanelClick(mx, my) {
   for (const entry of photoBorderOptionRects) {
     if (inRect(mx, my, entry.rect)) {
       const target = draggables[entry.targetIndex];
-      if (target && target.type === "photo") {
+      if (
+        target &&
+        target.type === "photo" &&
+        target.borderStyle !== entry.option
+      ) {
+        pushUndoState();
         target.borderStyle = entry.option;
       }
       return true;
@@ -2089,6 +2297,112 @@ function resetWorkspace() {
   if (drawingAbove) drawingAbove.clear();
   UI.photoEditorPanel = null;
   photoBorderOptionRects = [];
+}
+function pushUndoState() {
+  if (!drawingBelow || !drawingAbove) return;
+  const snapshot = {
+    drawingBelow: drawingBelow.get(),
+    drawingAbove: drawingAbove.get(),
+    draggables: serializeDraggables(draggables),
+    frameIdx: currentFrameIdx,
+  };
+  undoStack.push(snapshot);
+  if (undoStack.length > UNDO_STACK_LIMIT) undoStack.shift();
+}
+function undoLastAction() {
+  if (!undoStack.length) return;
+  const snapshot = undoStack.pop();
+  if (drawingBelow && snapshot.drawingBelow) {
+    drawingBelow.clear();
+    drawingBelow.image(
+      snapshot.drawingBelow,
+      0,
+      0,
+      drawingBelow.width,
+      drawingBelow.height
+    );
+  }
+  if (drawingAbove && snapshot.drawingAbove) {
+    drawingAbove.clear();
+    drawingAbove.image(
+      snapshot.drawingAbove,
+      0,
+      0,
+      drawingAbove.width,
+      drawingAbove.height
+    );
+  }
+  if (typeof snapshot.frameIdx === "number") {
+    const maxIdx = Math.max(0, frameDefs.length - 1);
+    const nextIdx = Math.max(0, Math.min(maxIdx, snapshot.frameIdx));
+    currentFrameIdx = nextIdx;
+  }
+  draggables = deserializeDraggables(snapshot.draggables || []);
+  draggingIdx = -1;
+  activeMode = null;
+  spawnDrag = null;
+  drawingThisStroke = false;
+  blockDrawThisPress = false;
+  currentStrokeLayer = null;
+  UI.photoEditorPanel = null;
+  photoBorderOptionRects = [];
+}
+function serializeDraggables(list) {
+  return list.map((item) => {
+    const payload = {
+      type: item.type,
+      key: item.key,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      scale: item.scale,
+      angle: item.angle,
+      borderStyle: item.borderStyle,
+      selected: item.selected,
+      imgData: null,
+    };
+    if (item.type === "photo" && item.img && typeof item.img.get === "function") {
+      payload.imgData = item.img.get();
+    }
+    return payload;
+  });
+}
+function deserializeDraggables(dataList) {
+  return dataList.map((data) => {
+    let img = null;
+    if (data.type === "photo") {
+      if (data.imgData) {
+        img = createGraphics(data.imgData.width, data.imgData.height);
+        img.image(
+          data.imgData,
+          0,
+          0,
+          data.imgData.width,
+          data.imgData.height
+        );
+      }
+    } else if (data.key && stickers[data.key]) {
+      img = stickers[data.key];
+    } else if (data.imgData) {
+      img = data.imgData;
+    }
+    const clone = new DraggableItem({
+      type: data.type,
+      key: data.key,
+      img,
+      x: data.x,
+      y: data.y,
+      w: data.w,
+      h: data.h,
+    });
+    clone.scale = typeof data.scale === "number" ? data.scale : 1;
+    clone.angle = typeof data.angle === "number" ? data.angle : 0;
+    clone.borderStyle = data.borderStyle || "none";
+    clone.selected = !!data.selected;
+    normalizeDraggableScale(clone);
+    return clone;
+  });
 }
 
 function isMouseOverPanelSticker(mx, my) {
@@ -2114,6 +2428,11 @@ function isMouseOverToolButtons(mx, my) {
 }
 function isMouseOverResetButton(mx, my) {
   return UI.resetButton ? inRect(mx, my, UI.resetButton) : false;
+}
+function isMouseOverUndoButton(mx, my) {
+  if (!UI.undoButton) return false;
+  if (!undoStack.length) return false;
+  return inRect(mx, my, UI.undoButton);
 }
 function isMouseOverPhotoPanel(mx, my) {
   if (UI.photoEditorPanel && inRect(mx, my, UI.photoEditorPanel)) return true;
@@ -2308,6 +2627,7 @@ function takePhotoIntoCanvas() {
       h = mirrored.height * ratio;
     const cx = UI.diaryFrameRect.x + UI.diaryFrameRect.w / 2 - w / 2;
     const cy = UI.diaryFrameRect.y + UI.diaryFrameRect.h / 2 - h / 2;
+    pushUndoState();
     const newItem = new DraggableItem({
       type: "photo",
       img: mirrored,
@@ -2394,7 +2714,9 @@ function setCursorSmart() {
     cursor(HAND);
     return;
   }
-  for (let i = draggables.length - 1; i >= 0 && !cursorSet; i--) {
+  const hitOrder = getDraggableHitOrderIndices();
+  for (const i of hitOrder) {
+    if (cursorSet) break;
     const item = draggables[i],
       hit = item.hitWhat(mouseX, mouseY);
     if (hit) {
@@ -2411,7 +2733,8 @@ function setCursorSmart() {
     }
   }
   if (!cursorSet) {
-    for (let i = draggables.length - 1; i >= 0 && !cursorSet; i--) {
+    for (const i of hitOrder) {
+      if (cursorSet) break;
       const item = draggables[i],
         hit = item.hitWhat(mouseX, mouseY);
       if (hit && hit.type === "resize") {
@@ -2435,6 +2758,7 @@ function setCursorSmart() {
       isMouseOverSizeButtons(mouseX, mouseY) ||
       isMouseOverColorButtons(mouseX, mouseY) ||
       isMouseOverFrameButtons(mouseX, mouseY) ||
+      isMouseOverUndoButton(mouseX, mouseY) ||
       isMouseOverResetButton(mouseX, mouseY) ||
       isMouseOverPhotoPanel(mouseX, mouseY) ||
       isMouseOverSaveButton(mouseX, mouseY))
