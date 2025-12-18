@@ -183,11 +183,11 @@ const stickerDefs = [
   { key: "bird", label: "새", src: "assets/stickers/sticker_bird.png" },
   { key: "pop", label: "팝", src: "assets/stickers/sticker_pop.png" },
   { key: "spring", label: "띠용", src: "assets/stickers/sticker_spring.png" },
-  { key: "cloud", label: "구름", src: "assets/stickers/sticker_cloud.png" },
+  { key: "star", label: "별", src: "assets/stickers/sticker_star.png" },
   { key: "snow", label: "눈", src: "assets/stickers/sticker_snow.png" },
-  { key: "book", label: "책", src: "assets/stickers/sticker_book.png" },
+  { key: "planet", label: "행성", src: "assets/stickers/sticker_planet.png" },
   { key: "blush", label: "블러쉬", src: "assets/stickers/sticker_blush.png" },
-  { key: "tape", label: "테이프", src: "assets/stickers/sticker_tape.png" },
+  { key: "rocket", label: "로켓", src: "assets/stickers/sticker_rocket.png" },
   { key: "heart", label: "하트", src: "assets/stickers/sticker_heart.png" },
 ];
 
@@ -2362,7 +2362,11 @@ function serializeDraggables(list) {
       selected: item.selected,
       imgData: null,
     };
-    if (item.type === "photo" && item.img && typeof item.img.get === "function") {
+    if (
+      item.type === "photo" &&
+      item.img &&
+      typeof item.img.get === "function"
+    ) {
       payload.imgData = item.img.get();
     }
     return payload;
@@ -2374,13 +2378,7 @@ function deserializeDraggables(dataList) {
     if (data.type === "photo") {
       if (data.imgData) {
         img = createGraphics(data.imgData.width, data.imgData.height);
-        img.image(
-          data.imgData,
-          0,
-          0,
-          data.imgData.width,
-          data.imgData.height
-        );
+        img.image(data.imgData, 0, 0, data.imgData.width, data.imgData.height);
       }
     } else if (data.key && stickers[data.key]) {
       img = stickers[data.key];
